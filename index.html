@@ -377,16 +377,18 @@ async function authRegister() {
     var cd = codeRef.data();
     if (cd.used) { authLoading(false); authError('该邀请码已被使用'); return; }
     if (cd.expiresAt && cd.expiresAt < Date.now()) { authLoading(false); authError('该邀请码已过期'); return; }
-    // Mark code as used
+    // Create account first (must be logged in to update invite code)
+    try {
+      await auth.createUserWithEmailAndPassword(email, pass);
+    } catch(err) {
+      authLoading(false);
+      if (err.code === 'auth/email-already-in-use') authError('该邮箱已被注册');
+      else if (err.code === 'auth/weak-password') authError('密码过于简单，至少6位');
+      else authError(err.message);
+      return;
+    }
+    // Now logged in, mark code as used
     await db.collection("inviteCodes").doc(invite.toUpperCase()).update({used:true, usedBy:email, usedAt:Date.now()});
-    // Create account
-    auth.createUserWithEmailAndPassword(email, pass)
-      .catch(function(err) {
-        authLoading(false);
-        if (err.code === 'auth/email-already-in-use') authError('该邮箱已被注册');
-        else if (err.code === 'auth/weak-password') authError('密码过于简单，至少6位');
-        else authError(err.message);
-      });
   } catch(e) {
     authLoading(false);
     authError('验证失败: '+e.message);
