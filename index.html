@@ -466,12 +466,14 @@ async function checkAdmin() {
   var user = auth.currentUser;
   if (!user) return;
   try {
+    console.log('checkAdmin: looking for email', user.email, '-> doc ID', user.email.replace(/[.@]/g, '_'));
     var doc = await db.collection("admins").doc(user.email.replace(/[.@]/g, '_')).get();
+    console.log('checkAdmin: doc exists?', doc.exists);
     if (doc.exists) {
       var btn = document.getElementById('btnInvite');
-      if (btn) btn.style.display = '';
+      if (btn) { btn.style.display = ''; console.log('checkAdmin: admin button shown'); }
     }
-  } catch(e) {}
+  } catch(e) { console.error('checkAdmin error:', e.message); }
 }
 
 // -- Invite code dialog --
