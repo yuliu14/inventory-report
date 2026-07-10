@@ -464,18 +464,22 @@ auth.onAuthStateChanged(function(user) {
 // -- Admin check --
 async function checkAdmin() {
   var user = auth.currentUser;
-  if (!user) { showToast('checkAdmin: no user logged in'); return; }
+  if (!user) return;
   try {
     var docId = user.email.replace(/[.@]/g, '_');
-    showToast('checkAdmin: checking docId=' + docId);
     var doc = await db.collection("admins").doc(docId).get();
+    var el = document.getElementById('userEmail');
     if (doc.exists) {
       var btn = document.getElementById('btnInvite');
-      if (btn) { btn.style.display = ''; showToast('✓ 管理员已识别'); }
+      if (btn) btn.style.display = '';
+      if (el) el.textContent = user.email + ' 👑';
     } else {
-      showToast('checkAdmin: doc not found for ' + docId);
+      if (el) el.textContent = user.email + ' [非管理员:'+docId+']';
     }
-  } catch(e) { showToast('checkAdmin ERROR: ' + e.message); }
+  } catch(e) {
+    var el = document.getElementById('userEmail');
+    if (el) el.textContent = user.email + ' [错误:'+e.message+']';
+  }
 }
 
 // -- Invite code dialog --
