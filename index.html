@@ -503,12 +503,16 @@ async function generateInviteCodes() {
     try {
       await db.collection("inviteCodes").doc(code).set(data);
       codes.push(code);
-    } catch(e) { codes.push('❌ 生成失败: ' + e.message); }
+    } catch(e) { codes.push('生成失败: ' + e.message); }
   }
 
-  listDiv.innerHTML = codes.map(function(c) {
-    return '<div class="invite-code-display" onclick="navigator.clipboard.writeText(\'' + c + '\');showToast(\'已复制: ' + c + '\')" title="点击复制" style="cursor:pointer">' + c + '</div>';
-  }).join('');
+  if (codes.length === 0) {
+    listDiv.innerHTML = '<div style="color:#dc2626">全部生成失败，请检查 Firestore 安全规则是否允许写入 inviteCodes</div>';
+  } else {
+    listDiv.innerHTML = codes.map(function(c) {
+      return '<div class="invite-code-display" onclick="navigator.clipboard.writeText(\'' + c + '\');showToast(\'已复制\')" title="点击复制" style="cursor:pointer;margin-bottom:4px">' + c + '</div>';
+    }).join('');
+  }
 }
 
 function randomCode(len) {
