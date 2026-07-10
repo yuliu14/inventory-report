@@ -6,6 +6,8 @@
 <title>公司库存预警</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <style>
 :root{
   --bg:#f1f5f9;--card:#fff;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;
@@ -166,11 +168,75 @@ tbody tr:hover{background:#f8fafc}
 .pri-low{background:#dbeafe;color:#1e40af}
 
 @media(max-width:768px){.sidebar{display:none}.chart-row{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(2,1fr)}}
+
+/* auth overlay */
+.auth-overlay{position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.auth-card{background:#fff;border-radius:14px;padding:36px 32px 28px;width:380px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.auth-card h2{font-size:20px;font-weight:700;color:#1e293b;text-align:center;margin-bottom:6px}
+.auth-card .subtitle{font-size:12px;color:#94a3b8;text-align:center;margin-bottom:24px}
+.auth-card .field{margin-bottom:14px}
+.auth-card .field label{display:block;font-size:11px;font-weight:600;color:#475569;margin-bottom:4px}
+.auth-card .field input{width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;transition:border-color .2s}
+.auth-card .field input:focus{border-color:#3b82f6}
+.auth-card .btn-auth{width:100%;padding:10px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;margin-top:4px}
+.auth-card .btn-auth.primary{background:#1d4ed8;color:#fff}
+.auth-card .btn-auth.primary:hover{background:#1e40af}
+.auth-card .auth-link{text-align:center;margin-top:14px;font-size:11px;color:#64748b}
+.auth-card .auth-link a{color:#3b82f6;cursor:pointer;text-decoration:none;font-weight:600}
+.auth-card .auth-link a:hover{text-decoration:underline}
+.auth-error{background:#fef2f2;color:#dc2626;font-size:11px;padding:8px 12px;border-radius:6px;margin-bottom:12px;display:none}
+.auth-spinner{display:none;width:20px;height:20px;border:2.5px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .6s linear infinite;margin:0 auto 12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* user area in topbar */
+.user-area{display:flex;align-items:center;gap:8px;font-size:11px;color:#475569;margin-left:auto}
+.user-area .user-email{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-area .btn-logout{padding:4px 10px;border:1px solid #e2e8f0;border-radius:5px;background:#fff;color:#ef4444;font-size:11px;cursor:pointer}
+.user-area .btn-logout:hover{background:#fef2f2;border-color:#fca5a5}
 </style>
 </head>
 <body>
 
-<aside class="sidebar">
+<!-- AUTH OVERLAY -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-spinner" id="authSpinner"></div>
+    <div class="auth-error" id="authError"></div>
+    <!-- LOGIN -->
+    <div id="authLogin">
+      <h2>🔐 登录报表</h2>
+      <div class="subtitle">库存DOS健康度 · 商业版</div>
+      <div class="field"><label>邮箱</label><input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" /></div>
+      <div class="field"><label>密码</label><input type="password" id="loginPass" placeholder="输入密码" autocomplete="current-password" /></div>
+      <button class="btn-auth primary" onclick="authLogin()">登 录</button>
+      <div class="auth-link">
+        <a onclick="authForgot()">忘记密码？</a>
+        &nbsp;·&nbsp;
+        <a onclick="authShowRegister()">注册新账号</a>
+      </div>
+    </div>
+    <!-- REGISTER -->
+    <div id="authRegister" style="display:none">
+      <h2>📝 注册账号</h2>
+      <div class="subtitle">创建一个新账号</div>
+      <div class="field"><label>邮箱</label><input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email" /></div>
+      <div class="field"><label>密码</label><input type="password" id="regPass" placeholder="至少6位字符" /></div>
+      <div class="field"><label>确认密码</label><input type="password" id="regPass2" placeholder="再次输入密码" /></div>
+      <button class="btn-auth primary" onclick="authRegister()">注 册</button>
+      <div class="auth-link"><a onclick="authShowLogin()">← 返回登录</a></div>
+    </div>
+    <!-- FORGOT -->
+    <div id="authForgotForm" style="display:none">
+      <h2>🔑 重置密码</h2>
+      <div class="subtitle">输入邮箱，我们会发送重置链接</div>
+      <div class="field"><label>邮箱</label><input type="email" id="forgotEmail" placeholder="your@email.com" /></div>
+      <button class="btn-auth primary" onclick="authSendReset()">发送重置邮件</button>
+      <div class="auth-link"><a onclick="authShowLogin()">← 返回登录</a></div>
+    </div>
+  </div>
+</div>
+
+<aside class="sidebar" style="display:none">
   <div class="sidebar-header">
     <h2>📊 公司库存预警</h2>
     <div class="sub">基于预计日销 · 库存预警</div>
@@ -178,11 +244,12 @@ tbody tr:hover{background:#f8fafc}
   <div class="nav-tree" id="navTree"></div>
 </aside>
 
-<div class="main">
+<div class="main" style="display:none">
   <div class="topbar">
     <div class="breadcrumb" id="breadcrumb">📋 <span>部门总览</span></div>
     <input class="search-box" id="searchInput" placeholder="🔍 搜索SKU/SPU/品名..." />
     <div class="actions">
+      <span class="user-area"><span class="user-email" id="userEmail"></span><button class="btn-logout" onclick="authLogout()">退出</button></span>
       <button class="btn" onclick="openAlertSettings()">⚙️ 参数设置</button>
       <button class="btn" onclick="openAddSKU()">➕ 新增SKU</button>
       <button class="btn" onclick="downloadTemplate()">📥 下载模板</button>
@@ -202,6 +269,157 @@ tbody tr:hover{background:#f8fafc}
 <div class="toast" id="toast"></div>
 
 <script>
+// ============================================================
+// FIREBASE AUTH
+// ============================================================
+firebase.initializeApp({
+  apiKey: "AIzaSyDxqco0KRAQwwLmFr9GLSJiAaFaRqi2sIU",
+  authDomain: "inventory-report-10954.firebaseapp.com",
+  projectId: "inventory-report-10954",
+  storageBucket: "inventory-report-10954.firebasestorage.app",
+  messagingSenderId: "1045025220928",
+  appId: "1:1045025220928:web:22bb2f8eabc02ba1f032a5"
+});
+
+var auth = firebase.auth();
+
+// -- Auth UI helpers --
+function authError(msg) {
+  var e = document.getElementById('authError');
+  e.textContent = msg; e.style.display = 'block';
+}
+function authClear() {
+  var e = document.getElementById('authError');
+  e.style.display = 'none';
+}
+function authLoading(on) {
+  document.getElementById('authSpinner').style.display = on ? 'block' : 'none';
+  var btns = document.querySelectorAll('.btn-auth.primary');
+  for (var i = 0; i < btns.length; i++) btns[i].disabled = on;
+}
+function authShowRegister() {
+  authClear();
+  document.getElementById('authLogin').style.display = 'none';
+  document.getElementById('authRegister').style.display = 'block';
+  document.getElementById('authForgotForm').style.display = 'none';
+}
+function authShowLogin() {
+  authClear();
+  document.getElementById('authLogin').style.display = 'block';
+  document.getElementById('authRegister').style.display = 'none';
+  document.getElementById('authForgotForm').style.display = 'none';
+}
+function authForgot() {
+  authClear();
+  document.getElementById('authLogin').style.display = 'none';
+  document.getElementById('authRegister').style.display = 'none';
+  document.getElementById('authForgotForm').style.display = 'block';
+}
+
+// -- Login --
+function authLogin() {
+  authClear();
+  var email = document.getElementById('loginEmail').value.trim();
+  var pass = document.getElementById('loginPass').value;
+  if (!email || !pass) { authError('请填写邮箱和密码'); return; }
+  authLoading(true);
+  auth.signInWithEmailAndPassword(email, pass)
+    .catch(function(err) {
+      authLoading(false);
+      if (err.code === 'auth/invalid-credential') authError('邮箱或密码错误');
+      else if (err.code === 'auth/user-not-found') authError('该账号不存在');
+      else if (err.code === 'auth/invalid-email') authError('邮箱格式不正确');
+      else authError(err.message);
+    });
+}
+
+// -- Register --
+function authRegister() {
+  authClear();
+  var email = document.getElementById('regEmail').value.trim();
+  var pass = document.getElementById('regPass').value;
+  var pass2 = document.getElementById('regPass2').value;
+  if (!email || !pass) { authError('请填写邮箱和密码'); return; }
+  if (pass.length < 6) { authError('密码至少需要6位'); return; }
+  if (pass !== pass2) { authError('两次密码不一致'); return; }
+  authLoading(true);
+  auth.createUserWithEmailAndPassword(email, pass)
+    .catch(function(err) {
+      authLoading(false);
+      if (err.code === 'auth/email-already-in-use') authError('该邮箱已被注册');
+      else if (err.code === 'auth/weak-password') authError('密码过于简单，至少6位');
+      else authError(err.message);
+    });
+}
+
+// -- Logout --
+function authLogout() {
+  auth.signOut();
+}
+
+// -- Forgot password --
+function authSendReset() {
+  authClear();
+  var email = document.getElementById('forgotEmail').value.trim();
+  if (!email) { authError('请输入邮箱地址'); return; }
+  authLoading(true);
+  auth.sendPasswordResetEmail(email)
+    .then(function() {
+      authLoading(false);
+      document.getElementById('forgotEmail').value = '';
+      authError('重置链接已发送到 ' + email + '，请查收邮件（可能到垃圾箱）');
+    })
+    .catch(function(err) {
+      authLoading(false);
+      if (err.code === 'auth/user-not-found') authError('该邮箱未注册');
+      else authError(err.message);
+    });
+}
+
+// Listen for enter key on auth forms
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  var ov = document.getElementById('authOverlay');
+  if (ov.style.display === 'none') return;
+  if (document.getElementById('authRegister').style.display !== 'none') {
+    authRegister();
+  } else if (document.getElementById('authForgotForm').style.display !== 'none') {
+    authSendReset();
+  } else {
+    authLogin();
+  }
+});
+
+// -- Auth state listener --
+auth.onAuthStateChanged(function(user) {
+  var overlay = document.getElementById('authOverlay');
+  var sidebar = document.querySelector('.sidebar');
+  var main = document.querySelector('.main');
+  if (user) {
+    // Logged in
+    overlay.style.display = 'none';
+    if (sidebar) sidebar.style.display = '';
+    if (main) main.style.display = '';
+    var el = document.getElementById('userEmail');
+    if (el) el.textContent = user.email;
+    // Initialize app if not yet done
+    if (!window._appInited) {
+      window._appInited = true;
+      initApp();
+    }
+  } else {
+    // Logged out
+    overlay.style.display = 'flex';
+    if (sidebar) sidebar.style.display = 'none';
+    if (main) main.style.display = 'none';
+    document.getElementById('authLogin').style.display = 'block';
+    document.getElementById('authRegister').style.display = 'none';
+    document.getElementById('authForgotForm').style.display = 'none';
+    authClear();
+    authLoading(false);
+  }
+});
+
 // ============================================================
 // DATA & RECALC ENGINE
 // ============================================================
@@ -1411,7 +1629,7 @@ function exportData(){
 // ============================================================
 // SEARCH
 // ============================================================
-document.addEventListener('DOMContentLoaded',function(){
+function initApp() {
   loadData();
   document.getElementById('searchInput').addEventListener('input',function(e){
     var q=e.target.value.toLowerCase().trim();
@@ -1423,7 +1641,7 @@ document.addEventListener('DOMContentLoaded',function(){
     setTimeout(function(){initCharts(rs);initSKUColSort();},50);
   });
   document.getElementById('editModal').addEventListener('click',function(e){if(e.target===this)clsModal();});
-});
+}
 
 // ============================================================
 // UTILS
