@@ -194,6 +194,9 @@ tbody tr:hover{background:#f8fafc}
 .user-area .user-email{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .user-area .btn-logout{padding:4px 10px;border:1px solid #e2e8f0;border-radius:5px;background:#fff;color:#ef4444;font-size:11px;cursor:pointer}
 .user-area .btn-logout:hover{background:#fef2f2;border-color:#fca5a5}
+.btn-admin{background:#fef3c7;color:#92400e;border:1px solid #fcd34d!important}
+.btn-admin:hover{background:#fde68a}
+.invite-code-display{font-family:monospace;font-size:18px;font-weight:700;color:#1e40af;background:#eff6ff;padding:6px 12px;border-radius:6px;text-align:center;letter-spacing:2px}
 </style>
 </head>
 <body>
@@ -212,8 +215,6 @@ tbody tr:hover{background:#f8fafc}
       <button class="btn-auth primary" onclick="authLogin()">登 录</button>
       <div class="auth-link">
         <a onclick="authForgot()">忘记密码？</a>
-        &nbsp;·&nbsp;
-        <a onclick="authShowRegister()">注册新账号</a>
       </div>
     </div>
     <!-- REGISTER -->
@@ -223,6 +224,7 @@ tbody tr:hover{background:#f8fafc}
       <div class="field"><label>邮箱</label><input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email" /></div>
       <div class="field"><label>密码</label><input type="password" id="regPass" placeholder="至少6位字符" /></div>
       <div class="field"><label>确认密码</label><input type="password" id="regPass2" placeholder="再次输入密码" /></div>
+      <div class="field"><label>邀请码 🔑</label><input type="text" id="regInvite" placeholder="请输入购买获得的邀请码" /></div>
       <button class="btn-auth primary" onclick="authRegister()">注 册</button>
       <div class="auth-link"><a onclick="authShowLogin()">← 返回登录</a></div>
     </div>
@@ -233,6 +235,24 @@ tbody tr:hover{background:#f8fafc}
       <div class="field"><label>邮箱</label><input type="email" id="forgotEmail" placeholder="your@email.com" /></div>
       <button class="btn-auth primary" onclick="authSendReset()">发送重置邮件</button>
       <div class="auth-link"><a onclick="authShowLogin()">← 返回登录</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- INVITE CODE DIALOG -->
+<div class="modal-overlay" id="inviteDialog" style="display:none">
+  <div class="modal" style="max-width:440px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:15px">👑 生成邀请码</h3>
+      <button class="btn" onclick="document.getElementById('inviteDialog').style.display='none'" style="padding:2px 8px">✕</button>
+    </div>
+    <div class="field"><label>生成数量</label><input type="number" id="inviteCount" value="1" min="1" max="100" style="width:100%;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none" /></div>
+    <div class="field"><label>有效期（天，0=永久）</label><input type="number" id="inviteDays" value="365" min="0" style="width:100%;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none" /></div>
+    <div class="field"><label>备注</label><input type="text" id="inviteNote" placeholder="如：XX公司3年授权" style="width:100%;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none" /></div>
+    <button class="btn-auth primary" onclick="generateInviteCodes()" style="margin-top:8px">生成</button>
+    <div id="inviteResult" style="margin-top:12px;display:none">
+      <div style="font-size:11px;color:#64748b;margin-bottom:6px">📋 邀请码（点击复制）</div>
+      <div id="inviteCodeList" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto"></div>
     </div>
   </div>
 </div>
@@ -256,6 +276,7 @@ tbody tr:hover{background:#f8fafc}
       <button class="btn" onclick="downloadTemplate()">📥 下载模板</button>
       <button class="btn btn-pri" onclick="document.getElementById('importFile').click()">📤 导入Excel</button>
       <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)" />
+      <button class="btn btn-admin" id="btnInvite" onclick="openInviteDialog()" style="display:none">👑 生成邀请码</button>
       <button class="btn" onclick="resetAll()">🔄 重置</button>
       <button class="btn btn-pri" onclick="saveData()">💾 <span id="autoSaveBadge"></span>保存</button>
       <button class="btn btn-pri" onclick="exportData()">📥 导出CSV</button>
@@ -336,22 +357,38 @@ function authLogin() {
 }
 
 // -- Register --
-function authRegister() {
+async function authRegister() {
   authClear();
   var email = document.getElementById('regEmail').value.trim();
   var pass = document.getElementById('regPass').value;
   var pass2 = document.getElementById('regPass2').value;
+  var invite = document.getElementById('regInvite').value.trim();
   if (!email || !pass) { authError('请填写邮箱和密码'); return; }
+  if (!invite) { authError('请输入邀请码'); return; }
   if (pass.length < 6) { authError('密码至少需要6位'); return; }
   if (pass !== pass2) { authError('两次密码不一致'); return; }
   authLoading(true);
-  auth.createUserWithEmailAndPassword(email, pass)
-    .catch(function(err) {
-      authLoading(false);
-      if (err.code === 'auth/email-already-in-use') authError('该邮箱已被注册');
-      else if (err.code === 'auth/weak-password') authError('密码过于简单，至少6位');
-      else authError(err.message);
-    });
+  // Validate invite code
+  try {
+    var codeRef = await db.collection("inviteCodes").doc(invite.toUpperCase()).get();
+    if (!codeRef.exists) { authLoading(false); authError('邀请码无效'); return; }
+    var cd = codeRef.data();
+    if (cd.used) { authLoading(false); authError('该邀请码已被使用'); return; }
+    if (cd.expiresAt && cd.expiresAt < Date.now()) { authLoading(false); authError('该邀请码已过期'); return; }
+    // Mark code as used
+    await db.collection("inviteCodes").doc(invite.toUpperCase()).update({used:true, usedBy:email, usedAt:Date.now()});
+    // Create account
+    auth.createUserWithEmailAndPassword(email, pass)
+      .catch(function(err) {
+        authLoading(false);
+        if (err.code === 'auth/email-already-in-use') authError('该邮箱已被注册');
+        else if (err.code === 'auth/weak-password') authError('密码过于简单，至少6位');
+        else authError(err.message);
+      });
+  } catch(e) {
+    authLoading(false);
+    authError('验证失败: '+e.message);
+  }
 }
 
 // -- Logout --
@@ -409,6 +446,8 @@ auth.onAuthStateChanged(function(user) {
       window._appInited = true;
       initApp();
     }
+    // Check if admin
+    checkAdmin();
   } else {
     // Logged out
     overlay.style.display = 'flex';
@@ -421,6 +460,63 @@ auth.onAuthStateChanged(function(user) {
     authLoading(false);
   }
 });
+
+// -- Admin check --
+async function checkAdmin() {
+  var user = auth.currentUser;
+  if (!user) return;
+  try {
+    var doc = await db.collection("admins").doc(user.email.replace(/\./g, '_')).get();
+    if (doc.exists) {
+      var btn = document.getElementById('btnInvite');
+      if (btn) btn.style.display = '';
+    }
+  } catch(e) {}
+}
+
+// -- Invite code dialog --
+function openInviteDialog() {
+  document.getElementById('inviteDialog').style.display = 'flex';
+  document.getElementById('inviteResult').style.display = 'none';
+  document.getElementById('inviteCount').value = '1';
+  document.getElementById('inviteDays').value = '365';
+  document.getElementById('inviteNote').value = '';
+}
+
+// -- Generate invite codes --
+async function generateInviteCodes() {
+  var count = parseInt(document.getElementById('inviteCount').value) || 1;
+  var days = parseInt(document.getElementById('inviteDays').value) || 0;
+  var note = document.getElementById('inviteNote').value.trim();
+  if (count < 1 || count > 100) { alert('数量1-100之间'); return; }
+
+  var resultDiv = document.getElementById('inviteResult');
+  var listDiv = document.getElementById('inviteCodeList');
+  resultDiv.style.display = 'block';
+  listDiv.innerHTML = '<div style="color:#64748b;font-size:11px">生成中...</div>';
+
+  var codes = [];
+  for (var i = 0; i < count; i++) {
+    var code = 'INV-' + randomCode(8);
+    var data = { used: false, usedBy: '', usedAt: 0, createdAt: Date.now(), note: note };
+    if (days > 0) data.expiresAt = Date.now() + days * 86400000;
+    try {
+      await db.collection("inviteCodes").doc(code).set(data);
+      codes.push(code);
+    } catch(e) { codes.push('❌ 生成失败: ' + e.message); }
+  }
+
+  listDiv.innerHTML = codes.map(function(c) {
+    return '<div class="invite-code-display" onclick="navigator.clipboard.writeText(\'' + c + '\');showToast(\'已复制: ' + c + '\')" title="点击复制" style="cursor:pointer">' + c + '</div>';
+  }).join('');
+}
+
+function randomCode(len) {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var s = '';
+  for (var i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
 
 // ============================================================
 // DATA & RECALC ENGINE
