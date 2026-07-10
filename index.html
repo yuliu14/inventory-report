@@ -466,7 +466,7 @@ async function checkAdmin() {
   var user = auth.currentUser;
   if (!user) return;
   try {
-    var doc = await db.collection("admins").doc(user.email.replace(/\./g, '_')).get();
+    var doc = await db.collection("admins").doc(user.email.replace(/[.@]/g, '_')).get();
     if (doc.exists) {
       var btn = document.getElementById('btnInvite');
       if (btn) btn.style.display = '';
