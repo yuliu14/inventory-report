@@ -465,20 +465,12 @@ auth.onAuthStateChanged(function(user) {
 async function checkAdmin() {
   var user = auth.currentUser;
   if (!user) return;
-  try {
-    var docId = user.email.replace(/[.@]/g, '_');
-    var doc = await db.collection("admins").doc(docId).get();
-    var el = document.getElementById('userEmail');
-    if (doc.exists) {
-      var btn = document.getElementById('btnInvite');
-      if (btn) btn.style.display = '';
-      if (el) el.textContent = user.email + ' 👑';
-    } else {
-      if (el) el.textContent = user.email + ' [非管理员:'+docId+']';
-    }
-  } catch(e) {
-    var el = document.getElementById('userEmail');
-    if (el) el.textContent = user.email + ' [错误:'+e.message+']';
+  var ADMIN_EMAILS = ['zibuyuly@163.com']; // 管理员列表，可以加多个
+  var el = document.getElementById('userEmail');
+  if (ADMIN_EMAILS.indexOf(user.email) >= 0) {
+    var btn = document.getElementById('btnInvite');
+    if (btn) btn.style.display = '';
+    if (el) el.textContent = user.email + ' 👑';
   }
 }
 
