@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>公司库存预警</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f1f5f9;--card:#fff;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;
+  --shadow:0 1px 3px rgba(0,0,0,.06);--radius:10px;--nav-w:250px;
+  --cBasic:#f8fafc;--cBasicB:#e2e8f0;--cBasicT:#475569;
+  --cDOS:#eff6ff;--cDOSB:#bfdbfe;--cDOST:#1e40af;
+  --cHealth:#f0fdf4;--cHealthB:#bbf7d0;--cHealthT:#166534;
+  --cSales:#faf5ff;--cSalesB:#e9d5ff;--cSalesT:#6b21a8;
+  --cAvg:#eef2ff;--cAvgB:#c7d2fe;--cAvgT:#3730a3;
+  --cInv:#f0fdfa;--cInvB:#99f6e4;--cInvT:#134e4a;
+  --cVal:#fffbeb;--cValB:#fde68a;--cValT:#92400e;
+  --cAge:#fff1f2;--cAgeB:#fecdd3;--cAgeT:#9f1239;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
+
+/* sidebar */
+.nav-edit{font-size:9px;opacity:0;cursor:pointer;padding:0 3px;transition:opacity .15s;flex-shrink:0}
+.nav-item .row:hover .nav-edit{opacity:0.6}
+.nav-edit:hover{opacity:1!important}
+.nav-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.sidebar{width:var(--nav-w);min-width:var(--nav-w);background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:10}
+.sidebar-header{padding:14px 16px;border-bottom:1px solid var(--border)}
+.sidebar-header h2{font-size:14px;color:#1e40af;display:flex;align-items:center;gap:6px}
+.sidebar-header .sub{font-size:9px;color:var(--text2);margin-top:2px}
+.nav-tree{flex:1;overflow-y:auto;padding:4px 0}
+.nav-item{cursor:pointer;user-select:none}
+.nav-item .row{display:flex;align-items:center;padding:7px 16px;gap:6px;font-size:11px;transition:.1s;border-left:3px solid transparent}
+.nav-item .row:hover{background:var(--hover, #f8fafc)}
+.nav-item.active>.row{background:#eff6ff;border-left-color:#3b82f6;color:#1e40af;font-weight:600}
+.nav-item .icon{font-size:13px;width:16px;text-align:center}
+.nav-item .badge{margin-left:auto;background:var(--border);color:var(--text2);font-size:9px;padding:1px 6px;border-radius:8px}
+.nav-item.active .badge{background:#dbeafe;color:#1e40af}
+.nav-children{display:none}
+.nav-item.expanded>.nav-children{display:block}
+.nav-children .row{padding-left:38px!important;font-size:10px!important}
+.nav-children .nav-children .row{padding-left:54px!important}
+
+/* main */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:#fff;padding:10px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.topbar .breadcrumb{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px}
+.topbar .breadcrumb span{color:var(--text);font-weight:600}
+.topbar .actions{margin-left:auto;display:flex;gap:5px}
+.search-box{padding:5px 10px;border:1px solid var(--border);border-radius:5px;font-size:11px;width:170px;outline:none}
+.search-box:focus{border-color:#3b82f6}
+
+.content{flex:1;overflow-y:auto;padding:12px 20px;display:flex;flex-direction:column;gap:10px}
+
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.kpi-card{background:var(--card);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow);border-left:3px solid transparent}
+.kpi-card .lbl{font-size:10px;letter-spacing:.2px;margin-bottom:2px}
+.kpi-card .val{font-size:20px;font-weight:700}
+.kpi-card .sub{font-size:9px;color:var(--text2)}
+.kpi-card.k-dos{border-left-color:#3b82f6}.k-dos .lbl{color:#3b82f6}
+.kpi-card.k-health{border-left-color:#10b981}.k-health .lbl{color:#10b981}
+.kpi-card.k-sales{border-left-color:#8b5cf6}.k-sales .lbl{color:#8b5cf6}
+.kpi-card.k-inv{border-left-color:#14b8a6}.k-inv .lbl{color:#14b8a6}
+.kpi-card.k-val{border-left-color:#f59e0b}.k-val .lbl{color:#f59e0b}
+.kpi-card.k-age{border-left-color:#e11d48}.k-age .lbl{color:#e11d48}
+
+/* charts */
+.chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chart-wrap{position:relative;height:230px}
+.chart-wrap canvas{width:100%!important;height:100%!important}
+
+/* panel */
+.panel{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.panel-hd{padding:9px 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:12px;display:flex;align-items:center;gap:6px}
+.panel-hd .hint{font-weight:400;font-size:9px;color:var(--text2);margin-left:4px}
+.panel-bd{overflow-x:auto;max-height:58vh;overflow-y:auto}
+
+/* table - colored section headers */
+table{width:100%;border-collapse:collapse;font-size:10px}
+.sec-hd th{padding:4px 5px;font-size:9px;font-weight:700;text-align:center;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:3;letter-spacing:.2px}
+.col-hd th{padding:3px 5px;font-size:9px;font-weight:600;text-align:right;border-bottom:2px solid var(--border);position:sticky;top:20px;z-index:2;white-space:nowrap;color:var(--text2)}
+.col-hd th:first-child,.col-hd th.col-l{text-align:left}
+
+.sh-basic{background:var(--cBasicB);color:var(--cBasicT)}
+.sh-dos{background:var(--cDOSB);color:var(--cDOST)}
+.sh-health{background:var(--cHealthB);color:var(--cHealthT)}
+.sh-sales{background:var(--cSalesB);color:var(--cSalesT)}
+.sh-avg{background:var(--cAvgB);color:var(--cAvgT)}
+.sh-inv{background:var(--cInvB);color:var(--cInvT)}
+.sh-val{background:var(--cValB);color:var(--cValT)}
+.sh-age{background:var(--cAgeB);color:var(--cAgeT)}
+
+.ch-basic{background:var(--cBasic)}.ch-dos{background:var(--cDOS)}.ch-health{background:var(--cHealth)}
+.ch-sales{background:var(--cSales)}.ch-avg{background:var(--cAvg)}.ch-inv{background:var(--cInv)}
+.ch-val{background:var(--cVal)}.ch-age{background:var(--cAge)}
+
+tbody td{padding:4px 5px;text-align:right;border-bottom:1px solid #f1f5f9;white-space:nowrap;font-size:10px}
+tbody td:first-child{text-align:left;font-weight:500}
+tbody tr:hover{background:#f8fafc}
+.drill-link{color:#3b82f6;cursor:pointer;font-weight:600}
+.drill-link:hover{text-decoration:underline}
+
+/* editable */
+.ed{background:#fffbe6;border-radius:2px;padding:1px 3px;display:inline-block;min-width:32px;text-align:right;cursor:pointer;font-size:10px}
+.ed:hover{background:#fef3c7;outline:1.5px solid #f59e0b}
+.ed:focus{background:#fff;outline:2px solid #3b82f6}
+
+/* badges */
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600}
+.bg-g{background:#d1fae5;color:#065f46}.bg-y{background:#fef3c7;color:#92400e}
+.bg-o{background:#ffedd5;color:#9a3412}.bg-r{background:#fee2e2;color:#991b1b}.bg-gray{background:#f1f5f9;color:#475569}
+
+/* buttons */
+.btn{padding:5px 10px;border:1px solid var(--border);border-radius:5px;font-size:10px;cursor:pointer;background:#fff;color:var(--text);transition:.1s;display:inline-flex;align-items:center;gap:3px}
+.btn:hover{background:#f8fafc}
+.btn-pri{background:#3b82f6;color:#fff;border-color:#3b82f6}.btn-pri:hover{background:#2563eb}
+.btn-xs{padding:2px 5px;font-size:9px;border-radius:3px}
+
+/* toast */
+.toast{position:fixed;bottom:16px;right:16px;background:#1e293b;color:#fff;padding:8px 14px;border-radius:7px;font-size:11px;z-index:999;opacity:0;pointer-events:none;transition:opacity .3s}
+.toast.show{opacity:1}.toast.ok{background:#059669}
+
+/* modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:50;display:flex;align-items:center;justify-content:center}
+.modal{background:#fff;border-radius:12px;padding:18px;width:540px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal h3{font-size:14px;margin-bottom:8px}
+.modal .f-row{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.modal .f-row label{width:85px;font-size:10px;color:var(--text2);text-align:right;flex-shrink:0}
+.modal .f-row input{flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px}
+.modal .f-row input:focus{outline:none;border-color:#3b82f6}
+.modal .f-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:10px}
+.modal .sec-tit{font-size:10px;font-weight:700;margin:8px 0 4px;padding:2px 6px;border-radius:3px}
+
+/* alert panel */
+.alert-panel{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:0}
+.alert-summary{display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;background:linear-gradient(135deg,#fff5f5,#fff);border-left:4px solid #ef4444}
+.alert-summary:hover{background:linear-gradient(135deg,#fef2f2,#fff5f5)}
+.alert-summary .a-title{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+.alert-summary .a-counts{display:flex;gap:10px;font-size:11px;margin-left:auto}
+.alert-summary .a-counts span{display:flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-weight:600}
+.alert-list{padding:0;max-height:360px;overflow-y:auto;display:none}
+.alert-list.open{display:block}
+.alert-item{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid #f1f5f9;font-size:11px;transition:.1s}
+.alert-item:hover{background:#fafafa}
+.alert-item.lv-urgent{border-left:3px solid #dc2626;background:#fef2f2}
+.alert-item.lv-high{border-left:3px solid #f97316;background:#fff7ed}
+.alert-item.lv-medium{border-left:3px solid #eab308;background:#fefce8}
+.alert-item.lv-low{border-left:3px solid #3b82f6;background:#eff6ff}
+.alert-item .a-pri{font-weight:700;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap;min-width:44px;text-align:center}
+.alert-item .a-sku{font-weight:600;min-width:140px}
+.alert-item .a-name{color:var(--text2);min-width:80px}
+.alert-item .a-store{min-width:70px;color:var(--text2)}
+.alert-item .a-metric{text-align:right;min-width:70px}
+.alert-item .a-metric .v{font-weight:600}
+.alert-item .a-metric .lbl{font-size:9px;color:var(--text2)}
+.alert-item .a-action{min-width:90px;text-align:right}
+.alert-item .a-action .qty{font-weight:700;color:#dc2626;font-size:13px}
+.pri-urgent{background:#fee2e2;color:#991b1b}
+.pri-high{background:#ffedd5;color:#9a3412}
+.pri-medium{background:#fef9c3;color:#854d0e}
+.pri-low{background:#dbeafe;color:#1e40af}
+
+@media(max-width:768px){.sidebar{display:none}.chart-row{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h2>📊 公司库存预警</h2>
+    <div class="sub">基于预计日销 · 库存预警</div>
+  </div>
+  <div class="nav-tree" id="navTree"></div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="breadcrumb" id="breadcrumb">📋 <span>部门总览</span></div>
+    <input class="search-box" id="searchInput" placeholder="🔍 搜索SKU/SPU/品名..." />
+    <div class="actions">
+      <button class="btn" onclick="openAlertSettings()">⚙️ 参数设置</button>
+      <button class="btn" onclick="openAddSKU()">➕ 新增SKU</button>
+      <button class="btn" onclick="downloadTemplate()">📥 下载模板</button>
+      <button class="btn btn-pri" onclick="document.getElementById('importFile').click()">📤 导入Excel</button>
+      <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none" onchange="importExcel(this)" />
+      <button class="btn" onclick="resetAll()">🔄 重置</button>
+      <button class="btn btn-pri" onclick="saveData()">💾 <span id="autoSaveBadge"></span>保存</button>
+      <button class="btn btn-pri" onclick="exportData()">📥 导出CSV</button>
+    </div>
+  </div>
+  <div class="content" id="mainContent"></div>
+</div>
+
+<div class="modal-overlay" id="editModal" style="display:none">
+  <div class="modal" id="editModalContent"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// DATA & RECALC ENGINE
+// ============================================================
+var predictCfg={w7:0.10,w14:0.20,w30:0.30,whist:0.40};savePredictCfg();
+  healthCfg={green:30,yellow:60,orange:90};
+let skuData=[],currentView={level:'dept',dept:null,store:null,spu:null};
+
+async function loadData(){
+  try{
+    var restored=loadSavedData();
+    if(restored){console.log("Loaded saved data:",skuData.length,"SKUs");}
+    else {skuData=[{"SKU": "GKT-MKT-79.84.5CM-Q-0520", "spu": "MKT", "品名": "门槛梯", "国家": "美国", "店铺": "Gorkett", "售价": "$119.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 400.0, "在库+在途DOS_14d": 400.0, "在库+在途DOS_30d": 160.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 3, "14天日销": 6, "30天日销": 31, "7天日均销量": 0.4, "14天日均销量": 0.4, "30天日均销量": 1.0, "日销最大值": 31, "预估日销": 1.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 160, "FBA在库数量": 0, "fbm可售": 0, "总库存": 160, "海外现货货值": 0.0, "海外在途货值": 39360.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR036ZD-6FT-single", "spu": "LR036", "品名": "铝梯036-6FT螺丝组装单只（可对折)", "国家": "美国", "店铺": "Gorkett", "售价": "$70.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 103.22, "在库+在途DOS_14d": 92.27, "在库+在途DOS_30d": 85.77, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 41, "14天日销": 93, "30天日销": 214, "7天日均销量": 5.9, "14天日均销量": 6.6, "30天日均销量": 7.1, "日销最大值": 214, "预估日销": 7.1, "0-30天库龄数量": 89, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 549, "FBA在库数量": 60, "fbm可售": 0, "总库存": 609, "海外现货货值": 0.0, "海外在途货值": 80401.05, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "MKT-79.63.5CM-Q", "spu": "MKT", "品名": "门槛梯-79.63.5CM-Q", "国家": "美国", "店铺": "Gorkett", "售价": "$99.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 153.75, "在库+在途DOS_14d": 136.67, "在库+在途DOS_30d": 175.71, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 11, "14天日销": 25, "30天日销": 43, "7天日均销量": 1.6, "14天日均销量": 1.8, "30天日均销量": 1.4, "日销最大值": 43, "预估日销": 1.4, "0-30天库龄数量": 197, "31-60天库龄数量": 32, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 34, "FBA在库数量": 212, "fbm可售": 0, "总库存": 246, "海外现货货值": 0.0, "海外在途货值": 7344.34, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "3075", "spu": "3075", "品名": "铝梯3075", "国家": "美国", "店铺": "KOLO-US", "售价": "$259.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 150.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 1000.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 0, "30天日销": 5, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.2, "日销最大值": 5, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 30, "国内在制": 170, "国内总库存": 200, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 200, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 16363.5, "国内在制货值": 92726.5, "listing标签": "有效"}, {"SKU": "CR-2-N", "spu": "CR-2", "品名": "宠物梯CR-2-N", "国家": "美国", "店铺": "KOLO-US", "售价": "$119.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 82.5, "在库+在途DOS_30d": 82.5, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 5, "30天日销": 11, "7天日均销量": 0.0, "14天日均销量": 0.4, "30天日均销量": 0.4, "日销最大值": 11, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 31, "FBA在库数量": 2, "fbm可售": 0, "总库存": 33, "海外现货货值": 0.0, "海外在途货值": 6793.65, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D2X", "spu": "KR", "品名": "橡胶坡道1.5cm", "国家": "美国", "店铺": "KOLO-US", "售价": "$29.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 156.0, "在库+在途DOS_14d": 260.0, "在库+在途DOS_30d": 260.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 7, "14天日销": 8, "30天日销": 17, "7天日均销量": 1.0, "14天日均销量": 0.6, "30天日均销量": 0.6, "日销最大值": 17, "预估日销": 0.6, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 100, "FBA在库数量": 56, "fbm可售": 0, "总库存": 156, "海外现货货值": 0.0, "海外在途货值": 1964.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D3X", "spu": "KR", "品名": "橡胶坡道2cm", "国家": "美国", "店铺": "KOLO-US", "售价": "$34.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 155.71, "在库+在途DOS_14d": 181.67, "在库+在途DOS_30d": 272.5, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 8, "30天日销": 13, "7天日均销量": 0.7, "14天日均销量": 0.6, "30天日均销量": 0.4, "日销最大值": 13, "预估日销": 0.4, "0-30天库龄数量": 50, "31-60天库龄数量": 25, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 40, "FBA在库数量": 69, "fbm可售": 0, "总库存": 109, "海外现货货值": 0.0, "海外在途货值": 838.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D4X", "spu": "KR", "品名": "橡胶坡道2.5cm", "国家": "美国", "店铺": "KOLO-US", "售价": "$36.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 108.0, "在库+在途DOS_14d": 128.57, "在库+在途DOS_30d": 163.64, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 35, "14天日销": 59, "30天日销": 99, "7天日均销量": 5.0, "14天日均销量": 4.2, "30天日均销量": 3.3, "日销最大值": 99, "预估日销": 3.3, "0-30天库龄数量": 185, "31-60天库龄数量": 177, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 200, "FBA在库数量": 340, "fbm可售": 0, "总库存": 540, "海外现货货值": 0.0, "海外在途货值": 4546.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D5X", "spu": "KR", "品名": "橡胶坡道3cm", "国家": "美国", "店铺": "KOLO-US", "售价": "$44.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 226.67, "在库+在途DOS_14d": 123.64, "在库+在途DOS_30d": 151.11, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 4, "14天日销": 16, "30天日销": 28, "7天日均销量": 0.6, "14天日均销量": 1.1, "30天日均销量": 0.9, "日销最大值": 28, "预估日销": 0.9, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 136, "fbm可售": 0, "总库存": 136, "海外现货货值": 6624.28, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D6X", "spu": "KR", "品名": "橡胶坡道4cm", "国家": "美国", "店铺": "KOLO-US", "售价": "$52.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 540.0, "在库+在途DOS_14d": 77.14, "在库+在途DOS_30d": 60.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 10, "30天日销": 27, "7天日均销量": 0.1, "14天日均销量": 0.7, "30天日均销量": 0.9, "日销最大值": 27, "预估日销": 0.9, "0-30天库龄数量": 0, "31-60天库龄数量": 17, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 30, "FBA在库数量": 24, "fbm可售": 0, "总库存": 54, "海外现货货值": 0.0, "海外在途货值": 1363.5, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR001M-A-XTWB", "spu": "LR001M", "品名": "铝梯001M-A-XTWB双只", "国家": "美国", "店铺": "KOLO-US", "售价": "$269.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 51.67, "在库+在途DOS_14d": 51.67, "在库+在途DOS_30d": 44.29, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 4, "14天日销": 9, "30天日销": 22, "7天日均销量": 0.6, "14天日均销量": 0.6, "30天日均销量": 0.7, "日销最大值": 22, "预估日销": 0.7, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 22, "FBA在库数量": 9, "fbm可售": 0, "总库存": 31, "海外现货货值": 0.0, "海外在途货值": 12967.9, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR001M-A-XTWB-B", "spu": "LR001M", "品名": "铝梯001M-A-XTWB双只黑色", "国家": "美国", "店铺": "KOLO-US", "售价": "$279.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 320.0, "在库+在途DOS_14d": 160.0, "在库+在途DOS_30d": 120.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 9, "30天日销": 24, "7天日均销量": 0.3, "14天日均销量": 0.6, "30天日均销量": 0.8, "日销最大值": 24, "预估日销": 0.8, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 83, "FBA在库数量": 13, "fbm可售": 0, "总库存": 96, "海外现货货值": 0.0, "海外在途货值": 54701.98, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR001M-A-XTWB-B-single", "spu": "LR001M", "品名": "铝梯001M-A-XTWB单只黑色", "国家": "美国", "店铺": "KOLO-US", "售价": "$149.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 16.67, "在库+在途DOS_14d": 25.0, "在库+在途DOS_30d": 33.33, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 4, "14天日销": 5, "30天日销": 8, "7天日均销量": 0.6, "14天日均销量": 0.4, "30天日均销量": 0.3, "日销最大值": 8, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 10, "FBA在库数量": 0, "fbm可售": 0, "总库存": 10, "海外现货货值": 0.0, "海外在途货值": 3331.2, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR001M-A-XTWB-single", "spu": "LR001M", "品名": "铝梯001M-A-XTWB单只", "国家": "美国", "店铺": "KOLO-US", "售价": "$129.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 53.33, "在库+在途DOS_14d": 40.0, "在库+在途DOS_30d": 80.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 5, "30天日销": 5, "7天日均销量": 0.3, "14天日均销量": 0.4, "30天日均销量": 0.2, "日销最大值": 5, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 16, "fbm可售": 0, "总库存": 16, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR016-1.2M", "spu": "LR016", "品名": "铝梯016-1.2M双只", "国家": "美国", "店铺": "KOLO-US", "售价": "$89.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 200.0, "在库+在途DOS_14d": 150.0, "在库+在途DOS_30d": 100.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 5, "30天日销": 18, "7天日均销量": 0.3, "14天日均销量": 0.4, "30天日均销量": 0.6, "日销最大值": 18, "预估日销": 0.6, "0-30天库龄数量": 0, "31-60天库龄数量": 18, "61-90天库龄数量": 7, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 32, "FBA在库数量": 28, "fbm可售": 0, "总库存": 60, "海外现货货值": 0.0, "海外在途货值": 8003.84, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR016ZD-1.6M", "spu": "LR016", "品名": "铝梯016-1.6M双只（可对折）", "国家": "美国", "店铺": "KOLO-US", "售价": "$139.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 540.0, "在库+在途DOS_30d": 540.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 1, "30天日销": 3, "7天日均销量": 0.0, "14天日均销量": 0.1, "30天日均销量": 0.1, "日销最大值": 3, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 36, "国内总库存": 36, "FBA在途数量": 18, "FBA在库数量": 0, "fbm可售": 0, "总库存": 54, "海外现货货值": 0.0, "海外在途货值": 5500.98, "国内现货货值": 0.0, "国内在制货值": 11001.96, "listing标签": "有效"}, {"SKU": "LR016ZD-1.6M-single", "spu": "LR016", "品名": "铝梯016-1.6M单只（可对折）", "国家": "美国", "店铺": "KOLO-US", "售价": "$74.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 560.0, "在库+在途DOS_14d": 560.0, "在库+在途DOS_30d": 186.67, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 2, "30天日销": 8, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.3, "日销最大值": 8, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 30, "国内总库存": 30, "FBA在途数量": 13, "FBA在库数量": 13, "fbm可售": 0, "总库存": 56, "海外现货货值": 0.0, "海外在途货值": 1993.03, "国内现货货值": 0.0, "国内在制货值": 4599.3, "listing标签": "有效"}, {"SKU": "LR019A-N-A-XTWB", "spu": "LR019A-N-A", "品名": "铝梯019A-N-A-XTWB双只", "国家": "美国", "店铺": "KOLO-US", "售价": "$249.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 660.0, "在库+在途DOS_14d": 660.0, "在库+在途DOS_30d": 165.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 2, "30天日销": 12, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.4, "日销最大值": 12, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 58, "FBA在库数量": 8, "fbm可售": 0, "总库存": 66, "海外现货货值": 0.0, "海外在途货值": 41195.66, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR019A-N-A-XTWB-B", "spu": "LR019A-N-A", "品名": "铝梯019A-N-A-XTWB双只黑色", "国家": "美国", "店铺": "KOLO-US", "售价": "$269.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 230.0, "在库+在途DOS_30d": 153.33, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 3, "30天日销": 10, "7天日均销量": 0.0, "14天日均销量": 0.2, "30天日均销量": 0.3, "日销最大值": 10, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 2, "61-90天库龄数量": 1, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 43, "FBA在库数量": 3, "fbm可售": 0, "总库存": 46, "海外现货货值": 0.0, "海外在途货值": 32430.6, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR022-1.4M", "spu": "LR022", "品名": "铝梯022-1.4M双只", "国家": "美国", "店铺": "KOLO-US", "售价": "$150.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 609.09, "在库+在途DOS_14d": 418.75, "在库+在途DOS_30d": 335.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 8, "14天日销": 22, "30天日销": 61, "7天日均销量": 1.1, "14天日均销量": 1.6, "30天日均销量": 2.0, "日销最大值": 61, "预估日销": 2.0, "0-30天库龄数量": 0, "31-60天库龄数量": 1, "61-90天库龄数量": 1, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 110, "国内总库存": 110, "FBA在途数量": 149, "FBA在库数量": 411, "fbm可售": 0, "总库存": 670, "海外现货货值": 0.0, "海外在途货值": 56733.24, "国内现货货值": 0.0, "国内在制货值": 41883.6, "listing标签": "有效"}, {"SKU": "LR022-1M", "spu": "LR022", "品名": "铝梯022-1M双只", "国家": "美国", "店铺": "KOLO-US", "售价": "$124.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 45, "FBA在库数量": 102, "fbm可售": 0, "总库存": 147, "海外现货货值": 0.0, "海外在途货值": 11862.45, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "MKT-60-84-5CM-X", "spu": "MKT", "品名": "MKT-60*84*5CM-X 双只", "国家": "美国", "店铺": "KOLO-US", "售价": "$159.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 30.91, "国内库存DOS_14d": 56.67, "国内库存DOS_30d": 68.0, "在库+在途DOS_7d": 607.27, "在库+在途DOS_14d": 1113.33, "在库+在途DOS_30d": 1336.0, "fbm可售dos_7d": 9.09, "fbm可售dos_14d": 16.67, "fbm可售dos_30d": 20.0, "7天日销": 8, "14天日销": 8, "30天日销": 14, "7天日均销量": 1.1, "14天日均销量": 0.6, "30天日均销量": 0.5, "日销最大值": 14, "预估日销": 0.5, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 34, "国内在制": 0, "国内总库存": 34, "FBA在途数量": 502, "FBA在库数量": 132, "fbm可售": 10, "总库存": 678, "海外现货货值": 0.0, "海外在途货值": 209519.74, "国内现货货值": 14190.58, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01-2FT-A-22.6.5-BK", "spu": "WR01-BK", "品名": "喷黑轮椅梯-2FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$84.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 106.67, "在库+在途DOS_30d": 106.67, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 4, "30天日销": 10, "7天日均销量": 0.0, "14天日均销量": 0.3, "30天日均销量": 0.3, "日销最大值": 10, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 2, "91-180天库龄数量": 1, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 32, "fbm可售": 0, "总库存": 32, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01-4FT-A-22.6.5-BK", "spu": "WR01-BK", "品名": "喷黑轮椅梯-4FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$159.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 50.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 0, "30天日销": 7, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.2, "日销最大值": 7, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 9, "FBA在库数量": 1, "fbm可售": 0, "总库存": 10, "海外现货货值": 454.72, "海外在途货值": 3710.25, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01A-4FT", "spu": "WR01A", "品名": "伸缩梯-4FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$105.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 33.33, "国内库存DOS_14d": 33.33, "国内库存DOS_30d": 16.67, "在库+在途DOS_7d": 210.0, "在库+在途DOS_14d": 210.0, "在库+在途DOS_30d": 105.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 4, "30天日销": 18, "7天日均销量": 0.3, "14天日均销量": 0.3, "30天日均销量": 0.6, "日销最大值": 18, "预估日销": 0.6, "0-30天库龄数量": 0, "31-60天库龄数量": 6, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 10, "国内在制": 10, "国内总库存": 20, "FBA在途数量": 20, "FBA在库数量": 23, "fbm可售": 0, "总库存": 63, "海外现货货值": 0.0, "海外在途货值": 3954.0, "国内现货货值": 1977.0, "国内在制货值": 1977.0, "listing标签": "有效"}, {"SKU": "WR01A-5FT", "spu": "WR01A", "品名": "伸缩梯-5FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$119.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 147.83, "在库+在途DOS_14d": 121.43, "在库+在途DOS_30d": 103.03, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 16, "14天日销": 39, "30天日销": 99, "7天日均销量": 2.3, "14天日均销量": 2.8, "30天日均销量": 3.3, "日销最大值": 99, "预估日销": 3.3, "0-30天库龄数量": 44, "31-60天库龄数量": 74, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 56, "国内总库存": 56, "FBA在途数量": 144, "FBA在库数量": 140, "fbm可售": 0, "总库存": 340, "海外现货货值": 0.0, "海外在途货值": 33215.04, "国内现货货值": 0.0, "国内在制货值": 12916.96, "listing标签": "有效"}, {"SKU": "WR01A-6FT", "spu": "WR01A", "品名": "伸缩梯-6FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$139.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 3.06, "国内库存DOS_14d": 3.66, "国内库存DOS_30d": 3.49, "在库+在途DOS_7d": 62.24, "在库+在途DOS_14d": 74.39, "在库+在途DOS_30d": 70.93, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 34, "14天日销": 57, "30天日销": 128, "7天日均销量": 4.9, "14天日均销量": 4.1, "30天日均销量": 4.3, "日销最大值": 128, "预估日销": 4.3, "0-30天库龄数量": 0, "31-60天库龄数量": 29, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 15, "国内在制": 25, "国内总库存": 40, "FBA在途数量": 132, "FBA在库数量": 133, "fbm可售": 0, "总库存": 305, "海外现货货值": 0.0, "海外在途货值": 37406.16, "国内现货货值": 4250.7, "国内在制货值": 7084.5, "listing标签": "有效"}, {"SKU": "WR01A-7FT", "spu": "WR01A", "品名": "伸缩梯-7FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$155.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 19.68, "国内库存DOS_14d": 19.27, "国内库存DOS_30d": 19.89, "在库+在途DOS_7d": 130.74, "在库+在途DOS_14d": 128.02, "在库+在途DOS_30d": 132.15, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 66, "14天日销": 135, "30天日销": 278, "7天日均销量": 9.4, "14天日均销量": 9.6, "30天日均销量": 9.3, "日销最大值": 278, "预估日销": 9.3, "0-30天库龄数量": 0, "31-60天库龄数量": 98, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 185, "国内在制": 0, "国内总库存": 185, "FBA在途数量": 497, "FBA在库数量": 547, "fbm可售": 0, "总库存": 1229, "海外现货货值": 0.0, "海外在途货值": 153905.99, "国内现货货值": 57288.95, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01B-2FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-2FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$89.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 104.12, "在库+在途DOS_14d": 118.0, "在库+在途DOS_30d": 126.43, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 12, "14天日销": 21, "30天日销": 41, "7天日均销量": 1.7, "14天日均销量": 1.5, "30天日均销量": 1.4, "日销最大值": 41, "预估日销": 1.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 18, "国内总库存": 18, "FBA在途数量": 97, "FBA在库数量": 62, "fbm可售": 0, "总库存": 177, "海外现货货值": 0.0, "海外在途货值": 21084.89, "国内现货货值": 0.0, "国内在制货值": 3912.66, "listing标签": "有效"}, {"SKU": "WR01B-3FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-3FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$112.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 164.85, "在库+在途DOS_14d": 111.46, "在库+在途DOS_30d": 128.64, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 117, "14天日销": 346, "30天日销": 642, "7天日均销量": 16.7, "14天日均销量": 24.7, "30天日均销量": 21.4, "日销最大值": 642, "预估日销": 21.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 655, "国内总库存": 655, "FBA在途数量": 1419, "FBA在库数量": 679, "fbm可售": 0, "总库存": 2753, "海外现货货值": 0.0, "海外在途货值": 411467.43, "国内现货货值": 0.0, "国内在制货值": 189930.35, "listing标签": "有效"}, {"SKU": "WR01B-4FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-4FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$139.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 94.39, "在库+在途DOS_14d": 90.29, "在库+在途DOS_30d": 109.3, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 46, "14天日销": 97, "30天日销": 170, "7天日均销量": 6.6, "14天日均销量": 6.9, "30天日均销量": 5.7, "日销最大值": 170, "预估日销": 5.7, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 240, "国内总库存": 240, "FBA在途数量": 141, "FBA在库数量": 242, "fbm可售": 0, "总库存": 623, "海外现货货值": 0.0, "海外在途货值": 51106.86, "国内现货货值": 0.0, "国内在制货值": 86990.4, "listing标签": "有效"}, {"SKU": "WR02-5FT-A-BK", "spu": "WR02-BK", "品名": "喷黑轮椅梯-5FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$208.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 160.0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 1, "30天日销": 1, "7天日均销量": 0.0, "14天日均销量": 0.1, "30天日均销量": 0.0, "日销最大值": 1, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 16, "fbm可售": 0, "总库存": 16, "海外现货货值": 9847.23, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR02-6FT-A-BK", "spu": "WR02-BK", "品名": "喷黑轮椅梯-6FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$0.00", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 1, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 1, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 8, "FBA在库数量": 3, "fbm可售": 0, "总库存": 11, "海外现货货值": 0.0, "海外在途货值": 5072.96, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR02-7FT-A-BK", "spu": "WR02-BK", "品名": "喷黑轮椅梯-7FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$283.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 260.0, "在库+在途DOS_30d": 260.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 2, "30天日销": 2, "7天日均销量": 0.0, "14天日均销量": 0.1, "30天日均销量": 0.1, "日销最大值": 2, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 26, "fbm可售": 0, "总库存": 26, "海外现货货值": 20719.32, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR03-10FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-10FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$448.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 40.0, "在库+在途DOS_14d": 18.0, "在库+在途DOS_30d": 36.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 6, "14天日销": 28, "30天日销": 31, "7天日均销量": 0.9, "14天日均销量": 2.0, "30天日均销量": 1.0, "日销最大值": 31, "预估日销": 1.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 30, "FBA在库数量": 6, "fbm可售": 0, "总库存": 36, "海外现货货值": 7494.09, "海外在途货值": 32310.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR03-5FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-5FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$205.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 120.33, "在库+在途DOS_14d": 200.56, "在库+在途DOS_30d": 164.09, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 21, "14天日销": 25, "30天日销": 66, "7天日均销量": 3.0, "14天日均销量": 1.8, "30天日均销量": 2.2, "日销最大值": 66, "预估日销": 2.2, "0-30天库龄数量": 0, "31-60天库龄数量": 78, "61-90天库龄数量": 52, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 168, "FBA在库数量": 193, "fbm可售": 0, "总库存": 361, "海外现货货值": 0.0, "海外在途货值": 82488.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR03-6FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-6FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$249.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 430.0, "在库+在途DOS_14d": 286.67, "在库+在途DOS_30d": 132.31, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 3, "14天日销": 9, "30天日销": 39, "7天日均销量": 0.4, "14天日均销量": 0.6, "30天日均销量": 1.3, "日销最大值": 39, "预估日销": 1.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 1, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 35, "国内总库存": 35, "FBA在途数量": 82, "FBA在库数量": 55, "fbm可售": 0, "总库存": 172, "海外现货货值": 0.0, "海外在途货值": 46835.12, "国内现货货值": 0.0, "国内在制货值": 19990.6, "listing标签": "有效"}, {"SKU": "WR03-7FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-7FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$281.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 74.29, "在库+在途DOS_14d": 74.29, "在库+在途DOS_30d": 104.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 10, "30天日销": 16, "7天日均销量": 0.7, "14天日均销量": 0.7, "30天日均销量": 0.5, "日销最大值": 16, "预估日销": 0.5, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 13, "国内总库存": 13, "FBA在途数量": 10, "FBA在库数量": 29, "fbm可售": 0, "总库存": 52, "海外现货货值": 0.0, "海外在途货值": 6750.0, "国内现货货值": 0.0, "国内在制货值": 8775.0, "listing标签": "有效"}, {"SKU": "WR03-8FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-8FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$348.99", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 32.5, "在库+在途DOS_14d": 32.5, "在库+在途DOS_30d": 43.33, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 3, "14天日销": 5, "30天日销": 8, "7天日均销量": 0.4, "14天日均销量": 0.4, "30天日均销量": 0.3, "日销最大值": 8, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 13, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 13, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 13, "fbm可售": 0, "总库存": 13, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR04-12FT-2ZC", "spu": "WR04", "品名": "黑色轮椅梯带支撑-12FT", "国家": "美国", "店铺": "KOLO-US", "售价": "$689.97", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 150.0, "在库+在途DOS_14d": 450.0, "在库+在途DOS_30d": 225.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 2, "30天日销": 7, "7天日均销量": 0.3, "14天日均销量": 0.1, "30天日均销量": 0.2, "日销最大值": 7, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 45, "FBA在库数量": 0, "fbm可售": 0, "总库存": 45, "海外现货货值": 0.0, "海外在途货值": 58995.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D2X", "spu": "KR", "品名": "橡胶坡道1.5cm", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$37.25", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 3, "30天日销": 4, "7天日均销量": 0.1, "14天日均销量": 0.2, "30天日均销量": 0.1, "日销最大值": 4, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 0, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D3X", "spu": "KR", "品名": "橡胶坡道2cm", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$40.98", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 50.0, "在库+在途DOS_14d": 50.0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0, "7天日销": 1, "14天日销": 1, "30天日销": 1, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.0, "日销最大值": 1, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 5, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 5, "fbm可售": 0, "总库存": 5, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D4X", "spu": "KR", "品名": "橡胶坡道2.5cm", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$40.98", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 13.33, "在库+在途DOS_14d": 24.0, "在库+在途DOS_30d": 30.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 6, "14天日销": 7, "30天日销": 13, "7天日均销量": 0.9, "14天日均销量": 0.5, "30天日均销量": 0.4, "日销最大值": 13, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 12, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 12, "fbm可售": 0, "总库存": 12, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D5X", "spu": "KR", "品名": "橡胶坡道3cm", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$59.61", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 1, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 1, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 35, "FBA在库数量": 0, "fbm可售": 0, "总库存": 35, "海外现货货值": 0.0, "海外在途货值": 1253.7, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "KR-D6X", "spu": "KR", "品名": "橡胶坡道4cm", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$67.06", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 30, "FBA在库数量": 0, "fbm可售": 0, "总库存": 30, "海外现货货值": 0.0, "海外在途货值": 1363.5, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR016-1.2M", "spu": "LR016", "品名": "铝梯016-1.2M双只", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$104.32", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 1, "30天日销": 3, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.1, "日销最大值": 3, "预估日销": 0.1, "0-30天库龄数量": 103, "31-60天库龄数量": 6, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 0, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR022-1.4M", "spu": "LR022", "品名": "铝梯022-1.4M双只", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$163.93", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 1010.0, "在库+在途DOS_14d": 252.5, "在库+在途DOS_30d": 505.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 5, "30天日销": 7, "7天日均销量": 0.1, "14天日均销量": 0.4, "30天日均销量": 0.2, "日销最大值": 7, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 1, "91-180天库龄数量": 0, "181-270天库龄数量": 10, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 10, "国内现货": 0, "国内在制": 55, "国内总库存": 55, "FBA在途数量": 34, "FBA在库数量": 12, "fbm可售": 0, "总库存": 101, "海外现货货值": 0.0, "海外在途货值": 12945.84, "国内现货货值": 0.0, "国内在制货值": 20941.8, "listing标签": "有效"}, {"SKU": "LR022-1M", "spu": "LR022", "品名": "铝梯022-1M双只", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$149.03", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 890.0, "在库+在途DOS_14d": 890.0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0, "7天日销": 1, "14天日销": 1, "30天日销": 1, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.0, "日销最大值": 1, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 35, "国内总库存": 35, "FBA在途数量": 35, "FBA在库数量": 19, "fbm可售": 0, "总库存": 89, "海外现货货值": 0.0, "海外在途货值": 9226.35, "国内现货货值": 0.0, "国内在制货值": 9226.35, "listing标签": "有效"}, {"SKU": "WR01A-4FT", "spu": "WR01A", "品名": "伸缩梯-4FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$111.77", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 20, "FBA在库数量": 0, "fbm可售": 0, "总库存": 20, "海外现货货值": 0.0, "海外在途货值": 3954.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01A-5FT", "spu": "WR01A", "品名": "伸缩梯-5FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$126.67", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 127.78, "在库+在途DOS_14d": 164.29, "在库+在途DOS_30d": 115.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 6, "14天日销": 10, "30天日销": 30, "7天日均销量": 0.9, "14天日均销量": 0.7, "30天日均销量": 1.0, "日销最大值": 30, "预估日销": 1.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 20, "国内总库存": 20, "FBA在途数量": 63, "FBA在库数量": 32, "fbm可售": 0, "总库存": 115, "海外现货货值": 0.0, "海外在途货值": 14531.58, "国内现货货值": 0.0, "国内在制货值": 4613.2, "listing标签": "有效"}, {"SKU": "WR01A-6FT", "spu": "WR01A", "品名": "伸缩梯-6FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$149.03", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 127.14, "在库+在途DOS_14d": 111.25, "在库+在途DOS_30d": 111.25, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 11, "30天日销": 24, "7天日均销量": 0.7, "14天日均销量": 0.8, "30天日均销量": 0.8, "日销最大值": 24, "预估日销": 0.8, "0-30天库龄数量": 0, "31-60天库龄数量": 4, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 20, "国内总库存": 20, "FBA在途数量": 65, "FBA在库数量": 4, "fbm可售": 0, "总库存": 89, "海外现货货值": 0.0, "海外在途货值": 18419.7, "国内现货货值": 0.0, "国内在制货值": 5667.6, "listing标签": "有效"}, {"SKU": "WR01A-7FT", "spu": "WR01A", "品名": "伸缩梯-7FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$171.39", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 339.0, "在库+在途DOS_14d": 260.77, "在库+在途DOS_30d": 188.33, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 7, "14天日销": 18, "30天日销": 55, "7天日均销量": 1.0, "14天日均销量": 1.3, "30天日均销量": 1.8, "日销最大值": 55, "预估日销": 1.8, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 50, "国内总库存": 50, "FBA在途数量": 225, "FBA在库数量": 64, "fbm可售": 0, "总库存": 339, "海外现货货值": 0.0, "海外在途货值": 69675.75, "国内现货货值": 0.0, "国内在制货值": 15483.5, "listing标签": "有效"}, {"SKU": "WR01B-2FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-2FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$96.87", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 356.67, "在库+在途DOS_14d": 1070.0, "在库+在途DOS_30d": 1070.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 2, "30天日销": 3, "7天日均销量": 0.3, "14天日均销量": 0.1, "30天日均销量": 0.1, "日销最大值": 3, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 50, "国内总库存": 50, "FBA在途数量": 40, "FBA在库数量": 17, "fbm可售": 0, "总库存": 107, "海外现货货值": 0.0, "海外在途货值": 8694.8, "国内现货货值": 0.0, "国内在制货值": 10868.5, "listing标签": "有效"}, {"SKU": "WR01B-3FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-3FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$134.13", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 1010.0, "在库+在途DOS_14d": 3030.0, "在库+在途DOS_30d": 606.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 2, "30天日销": 15, "7天日均销量": 0.3, "14天日均销量": 0.1, "30天日均销量": 0.5, "日销最大值": 15, "预估日销": 0.5, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 25, "国内总库存": 25, "FBA在途数量": 230, "FBA在库数量": 48, "fbm可售": 0, "总库存": 303, "海外现货货值": 0.0, "海外在途货值": 66693.1, "国内现货货值": 0.0, "国内在制货值": 7249.25, "listing标签": "有效"}, {"SKU": "WR01B-4FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-4FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$178.84", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 1400.0, "在库+在途DOS_30d": 466.67, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 1, "30天日销": 9, "7天日均销量": 0.0, "14天日均销量": 0.1, "30天日均销量": 0.3, "日销最大值": 9, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 20, "国内总库存": 20, "FBA在途数量": 100, "FBA在库数量": 20, "fbm可售": 0, "总库存": 140, "海外现货货值": 0.0, "海外在途货值": 36246.0, "国内现货货值": 0.0, "国内在制货值": 7249.2, "listing标签": "有效"}, {"SKU": "WR03-10FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-10FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$506.72", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 92.86, "在库+在途DOS_14d": 118.18, "在库+在途DOS_30d": 144.44, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 10, "14天日销": 16, "30天日销": 27, "7天日均销量": 1.4, "14天日均销量": 1.1, "30天日均销量": 0.9, "日销最大值": 27, "预估日销": 0.9, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 10, "国内总库存": 10, "FBA在途数量": 120, "FBA在库数量": 0, "fbm可售": 0, "总库存": 130, "海外现货货值": 0.0, "海外在途货值": 129240.0, "国内现货货值": 0.0, "国内在制货值": 10770.0, "listing标签": "有效"}, {"SKU": "WR03-5FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-5FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$223.55", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 92.86, "在库+在途DOS_14d": 72.22, "在库+在途DOS_30d": 65.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 13, "30天日销": 30, "7天日均销量": 0.7, "14天日均销量": 0.9, "30天日均销量": 1.0, "日销最大值": 30, "预估日销": 1.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 10, "国内总库存": 10, "FBA在途数量": 46, "FBA在库数量": 9, "fbm可售": 0, "总库存": 65, "海外现货货值": 0.0, "海外在途货值": 22586.0, "国内现货货值": 0.0, "国内在制货值": 4910.0, "listing标签": "有效"}, {"SKU": "WR03-6FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-6FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$260.81", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 760.0, "在库+在途DOS_14d": 380.0, "在库+在途DOS_30d": 253.33, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 3, "30天日销": 8, "7天日均销量": 0.1, "14天日均销量": 0.2, "30天日均销量": 0.3, "日销最大值": 8, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 10, "国内总库存": 10, "FBA在途数量": 55, "FBA在库数量": 11, "fbm可售": 0, "总库存": 76, "海外现货货值": 0.0, "海外在途货值": 31413.8, "国内现货货值": 0.0, "国内在制货值": 5711.6, "listing标签": "有效"}, {"SKU": "WR03-7FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-7FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$298.07", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 42.86, "国内库存DOS_14d": 75.0, "国内库存DOS_30d": 50.0, "在库+在途DOS_7d": 134.29, "在库+在途DOS_14d": 235.0, "在库+在途DOS_30d": 156.67, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 6, "30天日销": 17, "7天日均销量": 0.7, "14天日均销量": 0.4, "30天日均销量": 0.6, "日销最大值": 17, "预估日销": 0.6, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 30, "国内在制": 10, "国内总库存": 40, "FBA在途数量": 48, "FBA在库数量": 6, "fbm可售": 0, "总库存": 94, "海外现货货值": 0.0, "海外在途货值": 32400.0, "国内现货货值": 20250.0, "国内在制货值": 6750.0, "listing标签": "有效"}, {"SKU": "WR03-8FT-T-A-2ZC", "spu": "WR03", "品名": "黑色轮椅梯带支撑-8FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$394.94", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 100.0, "在库+在途DOS_30d": 125.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 7, "30天日销": 13, "7天日均销量": 0.0, "14天日均销量": 0.5, "30天日均销量": 0.4, "日销最大值": 13, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 10, "国内总库存": 10, "FBA在途数量": 24, "FBA在库数量": 16, "fbm可售": 0, "总库存": 50, "海外现货货值": 0.0, "海外在途货值": 20784.0, "国内现货货值": 0.0, "国内在制货值": 8660.0, "listing标签": "有效"}, {"SKU": "WR04-12FT-2ZC", "spu": "WR04", "品名": "黑色轮椅梯带支撑-12FT", "国家": "加拿大", "店铺": "KOLO-US-CA", "售价": "$745.18", "负责人": "范梓翔", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 64.29, "在库+在途DOS_14d": 56.25, "在库+在途DOS_30d": 75.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 11, "30天日销": 17, "7天日均销量": 0.7, "14天日均销量": 0.8, "30天日均销量": 0.6, "日销最大值": 17, "预估日销": 0.6, "0-30天库龄数量": 497, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 35, "FBA在库数量": 10, "fbm可售": 0, "总库存": 45, "海外现货货值": 0.0, "海外在途货值": 45885.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "BSS01-6.6x2.6FT-R", "spu": 0, "品名": "红色自行车棚6.6x2.6FT-R", "国家": "美国", "店铺": "PMEIXU", "售价": "$49.99", "负责人": "古帅辉", "部门": "运营三部", "国内库存DOS_7d": 1336.67, "国内库存DOS_14d": 308.46, "国内库存DOS_30d": 154.23, "在库+在途DOS_7d": 7810.0, "在库+在途DOS_14d": 1802.31, "在库+在途DOS_30d": 901.15, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 4, "14天日销": 37, "30天日销": 156, "7天日均销量": 0.6, "14天日均销量": 2.6, "30天日均销量": 5.2, "日销最大值": 156, "预估日销": 5.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 802, "国内在制": 2320, "国内总库存": 3122, "FBA在途数量": 960, "FBA在库数量": 604, "fbm可售": 0, "总库存": 4686, "海外现货货值": 0.0, "海外在途货值": 102979.2, "国内现货货值": 86030.54, "国内在制货值": 248866.4, "listing标签": "有效"}, {"SKU": "BSS01-7.2x4.9FT-R", "spu": 0, "品名": "红色自行车棚7.2x4.9FT-R", "国家": "美国", "店铺": "PMEIXU", "售价": "$89.99", "负责人": "古帅辉", "部门": "运营三部", "国内库存DOS_7d": 200.0, "国内库存DOS_14d": 300.0, "国内库存DOS_30d": 150.0, "在库+在途DOS_7d": 1313.33, "在库+在途DOS_14d": 1970.0, "在库+在途DOS_30d": 985.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 4, "14天日销": 5, "30天日销": 24, "7天日均销量": 0.6, "14天日均销量": 0.4, "30天日均销量": 0.8, "日销最大值": 24, "预估日销": 0.8, "0-30天库龄数量": 49, "31-60天库龄数量": 0, "61-90天库龄数量": 48, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 120, "国内在制": 440, "国内总库存": 560, "FBA在途数量": 160, "FBA在库数量": 68, "fbm可售": 0, "总库存": 788, "海外现货货值": 0.0, "海外在途货值": 25454.4, "国内现货货值": 19090.8, "国内在制货值": 69999.6, "listing标签": "有效"}, {"SKU": "CC01-12x20FT", "spu": 0, "品名": "金属车棚12x20FT", "国家": "美国", "店铺": "PMEIXU", "售价": "$639.99", "负责人": "古帅辉", "部门": "运营三部", "国内库存DOS_7d": 410.0, "国内库存DOS_14d": 410.0, "国内库存DOS_30d": 410.0, "在库+在途DOS_7d": 410.0, "在库+在途DOS_14d": 410.0, "在库+在途DOS_30d": 410.0, "fbm可售dos_7d": 270.0, "fbm可售dos_14d": 270.0, "fbm可售dos_30d": 270.0, "7天日销": 1, "14天日销": 2, "30天日销": 2, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.1, "日销最大值": 2, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 41, "国内在制": 0, "国内总库存": 41, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 27, "总库存": 68, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 64481.52, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "CC01-20x20FT", "spu": 0, "品名": "金属车棚20x20FT", "国家": "美国", "店铺": "PMEIXU", "售价": "$1159.99", "负责人": "古帅辉", "部门": "运营三部", "国内库存DOS_7d": 500.0, "国内库存DOS_14d": 166.67, "国内库存DOS_30d": 166.67, "在库+在途DOS_7d": 500.0, "在库+在途DOS_14d": 166.67, "在库+在途DOS_30d": 166.67, "fbm可售dos_7d": 260.0, "fbm可售dos_14d": 86.67, "fbm可售dos_30d": 86.67, "7天日销": 1, "14天日销": 4, "30天日销": 8, "7天日均销量": 0.1, "14天日均销量": 0.3, "30天日均销量": 0.3, "日销最大值": 8, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 50, "国内在制": 0, "国内总库存": 50, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 26, "总库存": 76, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 120909.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "SS01-10x12FT", "spu": 0, "品名": "金属工具房10x12FT", "国家": "美国", "店铺": "PMEIXU", "售价": "$0.00", "负责人": "古帅辉", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 19, "总库存": 19, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "SS01-6x4FT", "spu": 0, "品名": "金属工具房6x4FT", "国家": "美国", "店铺": "PMEIXU", "售价": "$0.00", "负责人": "古帅辉", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 47, "总库存": 47, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR016-1.2M", "spu": "LR016", "品名": "铝梯016-1.2M双只", "国家": "日本", "店铺": "gardhom-JP", "售价": "$69.68", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 1100.0, "在库+在途DOS_14d": 1100.0, "在库+在途DOS_30d": 550.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 1, "30天日销": 6, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.2, "日销最大值": 6, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 70, "国内总库存": 70, "FBA在途数量": 0, "FBA在库数量": 40, "fbm可售": 0, "总库存": 110, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 17507.0, "listing标签": "有效"}, {"SKU": "LR016ZD-1.6M-single", "spu": "LR016", "品名": "铝梯016-1.6M单只（可对折）", "国家": "日本", "店铺": "gardhom-JP", "售价": "$46.45", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 31.48, "国内库存DOS_14d": 42.5, "国内库存DOS_30d": 44.74, "在库+在途DOS_7d": 94.44, "在库+在途DOS_14d": 127.5, "在库+在途DOS_30d": 134.21, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 19, "14天日销": 28, "30天日销": 58, "7天日均销量": 2.7, "14天日均销量": 2.0, "30天日均销量": 1.9, "日销最大值": 58, "预估日销": 1.9, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 85, "国内在制": 90, "国内总库存": 175, "FBA在途数量": 0, "FBA在库数量": 80, "fbm可售": 0, "总库存": 255, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 13575.35, "国内在制货值": 14373.9, "listing标签": "有效"}, {"SKU": "LR022-1.4M", "spu": "LR022", "品名": "铝梯022-1.4M双只", "国家": "日本", "店铺": "gardhom-JP", "售价": "$116.14", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 180.0, "在库+在途DOS_30d": 180.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 2, "30天日销": 4, "7天日均销量": 0.0, "14天日均销量": 0.1, "30天日均销量": 0.1, "日销最大值": 4, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 8, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 18, "fbm可售": 0, "总库存": 18, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR022-1.4M-single", "spu": "LR022", "品名": "铝梯022-1.4M单只", "国家": "日本", "店铺": "gardhom-JP", "售价": "$0.00", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 10, "FBA在库数量": 0, "fbm可售": 0, "总库存": 10, "海外现货货值": 0.0, "海外在途货值": 1900.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR022-1M", "spu": "LR022", "品名": "铝梯022-1M双只", "国家": "日本", "店铺": "gardhom-JP", "售价": "$81.30", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 195.0, "在库+在途DOS_14d": 292.5, "在库+在途DOS_30d": 292.5, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 4, "14天日销": 5, "30天日销": 12, "7天日均销量": 0.6, "14天日均销量": 0.4, "30天日均销量": 0.4, "日销最大值": 12, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 70, "国内总库存": 70, "FBA在途数量": 0, "FBA在库数量": 47, "fbm可售": 0, "总库存": 117, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 19730.2, "listing标签": "有效"}, {"SKU": "LR022-1M-single", "spu": "LR022", "品名": "铝梯022-1M单只", "国家": "日本", "店铺": "gardhom-JP", "售价": "$46.45", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 50.0, "国内库存DOS_14d": 38.89, "国内库存DOS_30d": 35.0, "在库+在途DOS_7d": 227.14, "在库+在途DOS_14d": 176.67, "在库+在途DOS_30d": 159.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 13, "30天日销": 31, "7天日均销量": 0.7, "14天日均销量": 0.9, "30天日均销量": 1.0, "日销最大值": 31, "预估日销": 1.0, "0-30天库龄数量": 0, "31-60天库龄数量": 19, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 35, "国内在制": 70, "国内总库存": 105, "FBA在途数量": 0, "FBA在库数量": 54, "fbm可售": 0, "总库存": 159, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 4869.55, "国内在制货值": 9739.1, "listing标签": "有效"}, {"SKU": "MKT-60-84-5CM", "spu": "MKT", "品名": "门槛梯-60*84*5CM", "国家": "日本", "店铺": "gardhom-JP", "售价": "$116.14", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 40.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 0, "30天日销": 5, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.2, "日销最大值": 5, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 8, "FBA在库数量": 0, "fbm可售": 0, "总库存": 8, "海外现货货值": 0.0, "海外在途货值": 3474.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "MKT-60-84-5CM-single", "spu": "MKT", "品名": "门槛梯-60*84*5CM-single", "国家": "日本", "店铺": "gardhom-JP", "售价": "$69.68", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 12.5, "国内库存DOS_14d": 5.0, "国内库存DOS_30d": 7.14, "在库+在途DOS_7d": 12.5, "在库+在途DOS_14d": 5.0, "在库+在途DOS_30d": 7.14, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 3, "14天日销": 14, "30天日销": 20, "7天日均销量": 0.4, "14天日均销量": 1.0, "30天日均销量": 0.7, "日销最大值": 20, "预估日销": 0.7, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 5, "国内在制": 0, "国内总库存": 5, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 5, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 1132.75, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01A-4FT", "spu": "WR01A", "品名": "伸缩梯-4FT", "国家": "日本", "店铺": "gardhom-JP", "售价": "$75.49", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 75.83, "在库+在途DOS_14d": 58.71, "在库+在途DOS_30d": 56.88, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 17, "14天日销": 44, "30天日销": 97, "7天日均销量": 2.4, "14天日均销量": 3.1, "30天日均销量": 3.2, "日销最大值": 97, "预估日销": 3.2, "0-30天库龄数量": 21, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 50, "国内总库存": 50, "FBA在途数量": 97, "FBA在库数量": 35, "fbm可售": 0, "总库存": 182, "海外现货货值": 0.0, "海外在途货值": 20954.91, "国内现货货值": 0.0, "国内在制货值": 10801.5, "listing标签": "有效"}, {"SKU": "WR01A-5FT", "spu": "WR01A", "品名": "伸缩梯-5FT", "国家": "日本", "店铺": "gardhom-JP", "售价": "$87.11", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 89.0, "在库+在途DOS_14d": 63.57, "在库+在途DOS_30d": 68.46, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 7, "14天日销": 19, "30天日销": 38, "7天日均销量": 1.0, "14天日均销量": 1.4, "30天日均销量": 1.3, "日销最大值": 38, "预估日销": 1.3, "0-30天库龄数量": 26, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 55, "国内总库存": 55, "FBA在途数量": 26, "FBA在库数量": 8, "fbm可售": 0, "总库存": 89, "海外现货货值": 0.0, "海外在途货值": 6392.88, "国内现货货值": 0.0, "国内在制货值": 13523.4, "listing标签": "有效"}, {"SKU": "WR01A-7FT", "spu": "WR01A", "品名": "伸缩梯-7FT", "国家": "日本", "店铺": "gardhom-JP", "售价": "$110.33", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 55.0, "在库+在途DOS_14d": 66.0, "在库+在途DOS_30d": 41.25, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 4, "14天日销": 7, "30天日销": 24, "7天日均销量": 0.6, "14天日均销量": 0.5, "30天日均销量": 0.8, "日销最大值": 24, "预估日销": 0.8, "0-30天库龄数量": 34, "31-60天库龄数量": 23, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 10, "FBA在库数量": 23, "fbm可售": 0, "总库存": 33, "海外现货货值": 0.0, "海外在途货值": 3097.4, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01B-2FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-2FT", "国家": "日本", "店铺": "gardhom-JP", "售价": "$63.88", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 14.29, "在库+在途DOS_14d": 16.67, "在库+在途DOS_30d": 25.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 8, "30天日销": 13, "7天日均销量": 0.7, "14天日均销量": 0.6, "30天日均销量": 0.4, "日销最大值": 13, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 10, "FBA在库数量": 0, "fbm可售": 0, "总库存": 10, "海外现货货值": 0.0, "海外在途货值": 3189.6, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01B-3FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-3FT", "国家": "日本", "店铺": "gardhom-JP", "售价": "$87.11", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 50.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 0, "30天日销": 4, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.1, "日销最大值": 4, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 5, "FBA在库数量": 0, "fbm可售": 0, "总库存": 5, "海外现货货值": 0.0, "海外在途货值": 2455.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01B-4FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-4FT", "国家": "日本", "店铺": "gardhom-JP", "售价": "$102.20", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 122.86, "在库+在途DOS_14d": 143.33, "在库+在途DOS_30d": 122.86, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 5, "14天日销": 8, "30天日销": 22, "7天日均销量": 0.7, "14天日均销量": 0.6, "30天日均销量": 0.7, "日销最大值": 22, "预估日销": 0.7, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 40, "国内总库存": 40, "FBA在途数量": 5, "FBA在库数量": 41, "fbm可售": 0, "总库存": 86, "海外现货货值": 0.0, "海外在途货值": 1821.05, "国内现货货值": 0.0, "国内在制货值": 14568.4, "listing标签": "有效"}, {"SKU": "LR001A-XTWB", "spu": "LR001A", "品名": "铝梯001A-XTWB双只", "国家": "日本", "店铺": "力伸-JP", "售价": "$150.99", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 90.0, "在库+在途DOS_14d": 141.43, "在库+在途DOS_30d": 165.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 8, "14天日销": 10, "30天日销": 18, "7天日均销量": 1.1, "14天日均销量": 0.7, "30天日均销量": 0.6, "日销最大值": 18, "预估日销": 0.6, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 81, "国内总库存": 81, "FBA在途数量": 5, "FBA在库数量": 13, "fbm可售": 0, "总库存": 99, "海外现货货值": 0.0, "海外在途货值": 2709.3, "国内现货货值": 0.0, "国内在制货值": 43890.66, "listing标签": "有效"}, {"SKU": "LR001A-XTWB-B", "spu": "LR001A", "品名": "铝梯001A-XTWB双只黑色", "国家": "日本", "店铺": "力伸-JP", "售价": "$162.60", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 273.33, "在库+在途DOS_14d": 205.0, "在库+在途DOS_30d": 205.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 5, "30天日销": 12, "7天日均销量": 0.3, "14天日均销量": 0.4, "30天日均销量": 0.4, "日销最大值": 12, "预估日销": 0.4, "0-30天库龄数量": 159, "31-60天库龄数量": 0, "61-90天库龄数量": 17, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 55, "国内总库存": 55, "FBA在途数量": 0, "FBA在库数量": 27, "fbm可售": 0, "总库存": 82, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 32218.45, "listing标签": "有效"}, {"SKU": "LR001A-XTWB-B-single", "spu": "LR001A", "品名": "铝梯001A-XTWB单只黑色", "国家": "日本", "店铺": "力伸-JP", "售价": "$87.11", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 830.0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 1, "30天日销": 1, "7天日均销量": 0.0, "14天日均销量": 0.1, "30天日均销量": 0.0, "日销最大值": 1, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 8, "61-90天库龄数量": 20, "91-180天库龄数量": 7, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 48, "国内总库存": 48, "FBA在途数量": 0, "FBA在库数量": 35, "fbm可售": 0, "总库存": 83, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 14059.2, "listing标签": "有效"}, {"SKU": "LR001A-XTWB-single", "spu": "LR001A", "品名": "铝梯001A-XTWB单只", "国家": "日本", "店铺": "力伸-JP", "售价": "$81.30", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 700.0, "国内库存DOS_14d": 700.0, "国内库存DOS_30d": 350.0, "在库+在途DOS_7d": 1730.0, "在库+在途DOS_14d": 1730.0, "在库+在途DOS_30d": 865.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 1, "30天日销": 5, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.2, "日销最大值": 5, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 70, "国内在制": 51, "国内总库存": 121, "FBA在途数量": 0, "FBA在库数量": 52, "fbm可售": 0, "总库存": 173, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 18965.1, "国内在制货值": 13817.43, "listing标签": "有效"}, {"SKU": "LR002F-XTWB-B-single", "spu": "LR002F", "品名": "铝梯002F-XTWB单只黑色", "国家": "日本", "店铺": "力伸-JP", "售价": "$69.68", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 2, "30天日销": 11, "7天日均销量": 0.3, "14天日均销量": 0.1, "30天日均销量": 0.4, "日销最大值": 11, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 0, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "LR002F-XTWB-single", "spu": "LR002F", "品名": "铝梯002F-XTWB单只", "国家": "日本", "店铺": "力伸-JP", "售价": "$63.88", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 37.78, "在库+在途DOS_14d": 37.78, "在库+在途DOS_30d": 48.57, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 6, "14天日销": 12, "30天日销": 21, "7天日均销量": 0.9, "14天日均销量": 0.9, "30天日均销量": 0.7, "日销最大值": 21, "预估日销": 0.7, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 20, "国内总库存": 20, "FBA在途数量": 0, "FBA在库数量": 14, "fbm可售": 0, "总库存": 34, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 4539.8, "listing标签": "有效"}, {"SKU": "LR020A-108D-B-single", "spu": "LR020A", "品名": "铝梯108D单只(加提手加布扣）黑色", "国家": "日本", "店铺": "力伸-JP", "售价": "$213.92", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 50, "国内总库存": 50, "FBA在途数量": 5, "FBA在库数量": 0, "fbm可售": 0, "总库存": 55, "海外现货货值": 0.0, "海外在途货值": 3221.85, "国内现货货值": 0.0, "国内在制货值": 32218.5, "listing标签": "有效"}, {"SKU": "LR020A-120D-B-single", "spu": "LR020A", "品名": "铝梯120D单只(加提手加布扣）黑色", "国家": "日本", "店铺": "力伸-JP", "售价": "$249.71", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 50.91, "在库+在途DOS_14d": 70.0, "在库+在途DOS_30d": 93.33, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 8, "14天日销": 11, "30天日销": 19, "7天日均销量": 1.1, "14天日均销量": 0.8, "30天日均销量": 0.6, "日销最大值": 19, "预估日销": 0.6, "0-30天库龄数量": 190, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 45, "国内总库存": 45, "FBA在途数量": 10, "FBA在库数量": 1, "fbm可售": 0, "总库存": 56, "海外现货货值": 0.0, "海外在途货值": 7999.7, "国内现货货值": 0.0, "国内在制货值": 35998.65, "listing标签": "有效"}, {"SKU": "LR020A-94D-B-single", "spu": "LR020A", "品名": "铝梯94D单只(加提手加布扣）黑色", "国家": "日本", "店铺": "力伸-JP", "售价": "$174.22", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 7.69, "国内库存DOS_14d": 12.5, "国内库存DOS_30d": 12.5, "在库+在途DOS_7d": 44.62, "在库+在途DOS_14d": 72.5, "在库+在途DOS_30d": 72.5, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 9, "14天日销": 11, "30天日销": 24, "7天日均销量": 1.3, "14天日均销量": 0.8, "30天日均销量": 0.8, "日销最大值": 24, "预估日销": 0.8, "0-30天库龄数量": 150, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 10, "国内在制": 47, "国内总库存": 57, "FBA在途数量": 0, "FBA在库数量": 1, "fbm可售": 0, "总库存": 58, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 5711.5, "国内在制货值": 26844.05, "listing标签": "有效"}, {"SKU": "WR01A-4FT", "spu": "WR01A", "品名": "伸缩梯-4FT", "国家": "日本", "店铺": "力伸-JP", "售价": "$0.00", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 10, "FBA在库数量": 0, "fbm可售": 0, "总库存": 10, "海外现货货值": 0.0, "海外在途货值": 2250.6, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "WR01B-2FT-T-A-22.6.5", "spu": "WR01B", "品名": "黑色轮椅梯-2FT", "国家": "日本", "店铺": "力伸-JP", "售价": "$0.00", "负责人": "胡艳婷", "部门": "运营三部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 5, "FBA在库数量": 0, "fbm可售": 0, "总库存": 5, "海外现货货值": 0.0, "海外在途货值": 1594.8, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-001", "spu": 0, "品名": "充气桨板", "国家": "德国", "店铺": "KOLO", "售价": "$239.54", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 30.0, "fbm可售dos_14d": 7.5, "fbm可售dos_30d": 10.0, "7天日销": 1, "14天日销": 6, "30天日销": 8, "7天日均销量": 0.1, "14天日均销量": 0.4, "30天日均销量": 0.3, "日销最大值": 8, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 3, "总库存": 3, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-002", "spu": 0, "品名": "充气桨板", "国家": "德国", "店铺": "KOLO", "售价": "$228.14", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 5.0, "fbm可售dos_14d": 5.0, "fbm可售dos_30d": 7.5, "7天日销": 4, "14天日销": 8, "30天日销": 12, "7天日均销量": 0.6, "14天日均销量": 0.6, "30天日均销量": 0.4, "日销最大值": 12, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 3, "总库存": 3, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-002MAX", "spu": 0, "品名": "充气桨板", "国家": "德国", "店铺": "KOLO", "售价": "$262.36", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 236.67, "fbm可售dos_14d": 710.0, "fbm可售dos_30d": 710.0, "7天日销": 2, "14天日销": 2, "30天日销": 2, "7天日均销量": 0.3, "14天日均销量": 0.1, "30天日均销量": 0.1, "日销最大值": 2, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 71, "总库存": 71, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-003", "spu": 0, "品名": "充气桨板", "国家": "德国", "店铺": "KOLO", "售价": "$228.14", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 13.33, "fbm可售dos_14d": 13.33, "fbm可售dos_30d": 20.0, "7天日销": 4, "14天日销": 9, "30天日销": 13, "7天日均销量": 0.6, "14天日均销量": 0.6, "30天日均销量": 0.4, "日销最大值": 13, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 8, "总库存": 8, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-004", "spu": 0, "品名": "充气桨板", "国家": "德国", "店铺": "KOLO", "售价": "$228.14", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 7.27, "fbm可售dos_14d": 8.89, "fbm可售dos_30d": 13.33, "7天日销": 8, "14天日销": 13, "30天日销": 19, "7天日均销量": 1.1, "14天日均销量": 0.9, "30天日均销量": 0.6, "日销最大值": 19, "预估日销": 0.6, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 8, "总库存": 8, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-004MAX", "spu": 0, "品名": "充气桨板", "国家": "德国", "店铺": "KOLO", "售价": "$273.77", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 355.0, "fbm可售dos_30d": 710.0, "7天日销": 0, "14天日销": 3, "30天日销": 3, "7天日均销量": 0.0, "14天日均销量": 0.2, "30天日均销量": 0.1, "日销最大值": 3, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 71, "总库存": 71, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-005", "spu": 0, "品名": "充气桨板", "国家": "德国", "店铺": "KOLO", "售价": "$262.36", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 70.0, "fbm可售dos_14d": 14.0, "fbm可售dos_30d": 23.33, "7天日销": 1, "14天日销": 7, "30天日销": 10, "7天日均销量": 0.1, "14天日均销量": 0.5, "30天日均销量": 0.3, "日销最大值": 10, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 7, "总库存": 7, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "ZP-BBQ-GY", "spu": "ZP-BBQ-GY", "品名": "烧烤架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$99.99", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 1900.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 4100.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 0, "30天日销": 6, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.2, "日销最大值": 6, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 380, "国内在制": 410, "国内总库存": 790, "FBA在途数量": 10, "FBA在库数量": 20, "fbm可售": 0, "总库存": 820, "海外现货货值": 0.0, "海外在途货值": 2000.0, "国内现货货值": 76000.0, "国内在制货值": 82000.0, "listing标签": "有效"}, {"SKU": "ZP-ETHJ-BL", "spu": "ZP-ETHJ", "品名": "儿童画架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$89.99", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 167.14, "国内库存DOS_14d": 146.25, "国内库存DOS_30d": 180.0, "在库+在途DOS_7d": 779.29, "在库+在途DOS_14d": 681.88, "在库+在途DOS_30d": 839.23, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 10, "14天日销": 23, "30天日销": 40, "7天日均销量": 1.4, "14天日均销量": 1.6, "30天日均销量": 1.3, "日销最大值": 40, "预估日销": 1.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 234, "国内在制": 760, "国内总库存": 994, "FBA在途数量": 0, "FBA在库数量": 97, "fbm可售": 0, "总库存": 1091, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 20592.0, "国内在制货值": 66880.0, "listing标签": "有效"}, {"SKU": "ZP-ETHJ-GN", "spu": "ZP-ETHJ", "品名": "儿童画架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$69.99", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 87.08, "国内库存DOS_14d": 80.38, "国内库存DOS_30d": 72.07, "在库+在途DOS_7d": 538.75, "在库+在途DOS_14d": 497.31, "在库+在途DOS_30d": 445.86, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 17, "14天日销": 37, "30天日销": 86, "7天日均销量": 2.4, "14天日均销量": 2.6, "30天日均销量": 2.9, "日销最大值": 86, "预估日销": 2.9, "0-30天库龄数量": 24, "31-60天库龄数量": 1, "61-90天库龄数量": 65, "91-180天库龄数量": 66, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 209, "国内在制": 950, "国内总库存": 1159, "FBA在途数量": 0, "FBA在库数量": 134, "fbm可售": 0, "总库存": 1293, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 18392.0, "国内在制货值": 83600.0, "listing标签": "有效"}, {"SKU": "ZP-ETHJ-PK", "spu": "ZP-ETHJ", "品名": "儿童画架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$65.99", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 317.31, "国内库存DOS_14d": 275.0, "国内库存DOS_30d": 317.31, "在库+在途DOS_7d": 865.38, "在库+在途DOS_14d": 750.0, "在库+在途DOS_30d": 865.38, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 18, "14天日销": 42, "30天日销": 79, "7天日均销量": 2.6, "14天日均销量": 3.0, "30天日均销量": 2.6, "日销最大值": 79, "预估日销": 2.6, "0-30天库龄数量": 0, "31-60天库龄数量": 77, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 825, "国内在制": 1280, "国内总库存": 2105, "FBA在途数量": 67, "FBA在库数量": 78, "fbm可售": 0, "总库存": 2250, "海外现货货值": 0.0, "海外在途货值": 5896.0, "国内现货货值": 72600.0, "国内在制货值": 112640.0, "listing标签": "有效"}, {"SKU": "ZP-ETHJ-PP", "spu": "ZP-ETHJ", "品名": "儿童画架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$65.99", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 1380.0, "国内库存DOS_14d": 517.5, "国内库存DOS_30d": 591.43, "在库+在途DOS_7d": 6226.67, "在库+在途DOS_14d": 2335.0, "在库+在途DOS_30d": 2668.57, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 11, "30天日销": 22, "7天日均销量": 0.3, "14天日均销量": 0.8, "30天日均销量": 0.7, "日销最大值": 22, "预估日销": 0.7, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 414, "国内在制": 1330, "国内总库存": 1744, "FBA在途数量": 0, "FBA在库数量": 124, "fbm可售": 0, "总库存": 1868, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 36432.0, "国内在制货值": 117040.0, "listing标签": "有效"}, {"SKU": "ZP-MBTC-BR-4", "spu": "ZP-MBTC-BR-4", "品名": "面包推车", "国家": "美国", "店铺": "ZippyZebra", "售价": "$57.49", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 60.0, "国内库存DOS_14d": 50.0, "国内库存DOS_30d": 37.5, "在库+在途DOS_7d": 608.0, "在库+在途DOS_14d": 506.67, "在库+在途DOS_30d": 380.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 7, "14天日销": 17, "30天日销": 47, "7天日均销量": 1.0, "14天日均销量": 1.2, "30天日均销量": 1.6, "日销最大值": 47, "预估日销": 1.6, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 60, "国内在制": 500, "国内总库存": 560, "FBA在途数量": 0, "FBA在库数量": 48, "fbm可售": 0, "总库存": 608, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 7800.0, "国内在制货值": 65000.0, "listing标签": "有效"}, {"SKU": "ZP-PPJ-ML-2", "spu": "ZP-PPJ", "品名": "攀爬架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$139.99", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 1500.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 11000.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 0, "30天日销": 4, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.1, "日销最大值": 4, "预估日销": 0.1, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 150, "国内在制": 900, "国内总库存": 1050, "FBA在途数量": 50, "FBA在库数量": 0, "fbm可售": 0, "总库存": 1100, "海外现货货值": 0.0, "海外在途货值": 15175.0, "国内现货货值": 45525.0, "国内在制货值": 273150.0, "listing标签": "有效"}, {"SKU": "ZP-PPJJ-Blue", "spu": 0, "品名": "攀爬架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$129.89", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 283.33, "国内库存DOS_30d": 425.0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 313.33, "在库+在途DOS_30d": 470.0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 0, "14天日销": 4, "30天日销": 6, "7天日均销量": 0.0, "14天日均销量": 0.3, "30天日均销量": 0.2, "日销最大值": 6, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 85, "国内在制": 0, "国内总库存": 85, "FBA在途数量": 0, "FBA在库数量": 9, "fbm可售": 0, "总库存": 94, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 27310.5, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "ZP-PPJJ-Green", "spu": 0, "品名": "攀爬架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$129.89", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 283.33, "国内库存DOS_14d": 425.0, "国内库存DOS_30d": 850.0, "在库+在途DOS_7d": 320.0, "在库+在途DOS_14d": 480.0, "在库+在途DOS_30d": 960.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 3, "30天日销": 4, "7天日均销量": 0.3, "14天日均销量": 0.2, "30天日均销量": 0.1, "日销最大值": 4, "预估日销": 0.1, "0-30天库龄数量": 11, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 85, "国内在制": 0, "国内总库存": 85, "FBA在途数量": 0, "FBA在库数量": 11, "fbm可售": 0, "总库存": 96, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 27310.5, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "ZP-PPJJ-ML", "spu": 0, "品名": "攀爬架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$129.89", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 1, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 1, "预估日销": 0.0, "0-30天库龄数量": 70, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 230, "国内在制": 0, "国内总库存": 230, "FBA在途数量": 0, "FBA在库数量": 67, "fbm可售": 0, "总库存": 297, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 73899.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "ZP-PPJJ-Pink", "spu": 0, "品名": "攀爬架", "国家": "美国", "店铺": "ZippyZebra", "售价": "$129.89", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 283.33, "国内库存DOS_14d": 283.33, "国内库存DOS_30d": 850.0, "在库+在途DOS_7d": 320.0, "在库+在途DOS_14d": 320.0, "在库+在途DOS_30d": 960.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 2, "14天日销": 4, "30天日销": 4, "7天日均销量": 0.3, "14天日均销量": 0.3, "30天日均销量": 0.1, "日销最大值": 4, "预估日销": 0.1, "0-30天库龄数量": 13, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 85, "国内在制": 0, "国内总库存": 85, "FBA在途数量": 0, "FBA在库数量": 11, "fbm可售": 0, "总库存": 96, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 27310.5, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "ZP-WWW-BR", "spu": "ZP-WWW-BR", "品名": "娃娃屋", "国家": "美国", "店铺": "ZippyZebra", "售价": "$84.99", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 0, "国内库存DOS_14d": 0, "国内库存DOS_30d": 0, "在库+在途DOS_7d": 0, "在库+在途DOS_14d": 0, "在库+在途DOS_30d": 0, "fbm可售dos_7d": 0, "fbm可售dos_14d": 0, "fbm可售dos_30d": 0, "7天日销": 0, "14天日销": 0, "30天日销": 0, "7天日均销量": 0.0, "14天日均销量": 0.0, "30天日均销量": 0.0, "日销最大值": 0, "预估日销": 0.0, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 9, "fbm可售": 0, "总库存": 9, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "ZP-WWW-Pink", "spu": "ZP-WWW-BR", "品名": "娃娃屋", "国家": "美国", "店铺": "ZippyZebra", "售价": "$69.99", "负责人": "文慧", "部门": "运营二部", "国内库存DOS_7d": 3900.0, "国内库存DOS_14d": 1300.0, "国内库存DOS_30d": 1300.0, "在库+在途DOS_7d": 9590.0, "在库+在途DOS_14d": 3196.67, "在库+在途DOS_30d": 3196.67, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 4, "30天日销": 10, "7天日均销量": 0.1, "14天日均销量": 0.3, "30天日均销量": 0.3, "日销最大值": 10, "预估日销": 0.3, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 390, "国内在制": 500, "国内总库存": 890, "FBA在途数量": 0, "FBA在库数量": 69, "fbm可售": 0, "总库存": 959, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 89700.0, "国内在制货值": 115000.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-001", "spu": 0, "品名": "充气桨板", "国家": "美国", "店铺": "汇秩", "售价": "$169.99", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 30.3, "国内库存DOS_14d": 38.46, "国内库存DOS_30d": 66.67, "在库+在途DOS_7d": 30.3, "在库+在途DOS_14d": 38.46, "在库+在途DOS_30d": 66.67, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 23, "14天日销": 36, "30天日销": 44, "7天日均销量": 3.3, "14天日均销量": 2.6, "30天日均销量": 1.5, "日销最大值": 44, "预估日销": 1.5, "0-30天库龄数量": 125, "31-60天库龄数量": 24, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 100, "国内在制": 0, "国内总库存": 100, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 100, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 63300.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-002", "spu": 0, "品名": "充气桨板", "国家": "美国", "店铺": "汇秩", "售价": "$189.99", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 0.0, "国内库存DOS_14d": 0.0, "国内库存DOS_30d": 0.0, "在库+在途DOS_7d": 0.0, "在库+在途DOS_14d": 0.0, "在库+在途DOS_30d": 0.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 24, "14天日销": 54, "30天日销": 75, "7天日均销量": 3.4, "14天日均销量": 3.9, "30天日均销量": 2.5, "日销最大值": 75, "预估日销": 2.5, "0-30天库龄数量": 125, "31-60天库龄数量": 36, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 0, "国内在制": 0, "国内总库存": 0, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 0, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 0.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-002MAX", "spu": 0, "品名": "充气桨板", "国家": "加拿大", "店铺": "汇秩", "售价": "$231.00", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 45.45, "国内库存DOS_14d": 62.5, "国内库存DOS_30d": 125.0, "在库+在途DOS_7d": 45.45, "在库+在途DOS_14d": 62.5, "在库+在途DOS_30d": 125.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 8, "14天日销": 11, "30天日销": 11, "7天日均销量": 1.1, "14天日均销量": 0.8, "30天日均销量": 0.4, "日销最大值": 11, "预估日销": 0.4, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 50, "国内在制": 0, "国内总库存": 50, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 50, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 35875.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-003", "spu": 0, "品名": "充气桨板", "国家": "美国", "店铺": "汇秩", "售价": "$179.99", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 71.43, "国内库存DOS_14d": 55.56, "国内库存DOS_30d": 83.33, "在库+在途DOS_7d": 71.43, "在库+在途DOS_14d": 55.56, "在库+在途DOS_30d": 83.33, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 10, "14天日销": 25, "30天日销": 35, "7天日均销量": 1.4, "14天日均销量": 1.8, "30天日均销量": 1.2, "日销最大值": 35, "预估日销": 1.2, "0-30天库龄数量": 125, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 100, "国内在制": 0, "国内总库存": 100, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 100, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 64450.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-004", "spu": 0, "品名": "充气桨板", "国家": "美国", "店铺": "汇秩", "售价": "$169.99", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 20.41, "国内库存DOS_14d": 25.0, "国内库存DOS_30d": 45.45, "在库+在途DOS_7d": 20.41, "在库+在途DOS_14d": 25.0, "在库+在途DOS_30d": 45.45, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 34, "14天日销": 56, "30天日销": 66, "7天日均销量": 4.9, "14天日均销量": 4.0, "30天日均销量": 2.2, "日销最大值": 66, "预估日销": 2.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 100, "国内在制": 0, "国内总库存": 100, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 100, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 61600.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-004MAX", "spu": 0, "品名": "充气桨板", "国家": "加拿大", "店铺": "汇秩", "售价": "$231.00", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 38.46, "国内库存DOS_14d": 83.33, "国内库存DOS_30d": 166.67, "在库+在途DOS_7d": 38.46, "在库+在途DOS_14d": 83.33, "在库+在途DOS_30d": 166.67, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 9, "14天日销": 9, "30天日销": 10, "7天日均销量": 1.3, "14天日均销量": 0.6, "30天日均销量": 0.3, "日销最大值": 10, "预估日销": 0.3, "0-30天库龄数量": 125, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 50, "国内在制": 0, "国内总库存": 50, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 50, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 34275.0, "国内在制货值": 0.0, "listing标签": "有效"}, {"SKU": "FS-ISUP-005", "spu": 0, "品名": "充气桨板", "国家": "美国", "店铺": "汇秩", "售价": "$199.99", "负责人": "王清泉", "部门": "运营二部", "国内库存DOS_7d": 2600.0, "国内库存DOS_14d": 2600.0, "国内库存DOS_30d": 1300.0, "在库+在途DOS_7d": 2600.0, "在库+在途DOS_14d": 2600.0, "在库+在途DOS_30d": 1300.0, "fbm可售dos_7d": 0.0, "fbm可售dos_14d": 0.0, "fbm可售dos_30d": 0.0, "7天日销": 1, "14天日销": 2, "30天日销": 6, "7天日均销量": 0.1, "14天日均销量": 0.1, "30天日均销量": 0.2, "日销最大值": 6, "预估日销": 0.2, "0-30天库龄数量": 0, "31-60天库龄数量": 0, "61-90天库龄数量": 0, "91-180天库龄数量": 0, "181-270天库龄数量": 0, "271-330天库龄数量": 0, "331-365天库龄数量": 0, "大于365天库龄数量": 0, "大于180天库存合计": 0, "国内现货": 260, "国内在制": 0, "国内总库存": 260, "FBA在途数量": 0, "FBA在库数量": 0, "fbm可售": 0, "总库存": 260, "海外现货货值": 0.0, "海外在途货值": 0.0, "国内现货货值": 172380.0, "国内在制货值": 0.0, "listing标签": "有效"}];
+    }
+    skuData.forEach((r,i)=>{
+      // Parse all numeric fields
+      ['预估日销','7天日均销量','14天日均销量','30天日均销量',
+       '国内在制','国内现货','国内总库存','FBA在途数量','FBA在库数量','fbm可售','总库存',
+       '海外现货货值','海外在途货值','国内现货货值','国内在制货值',
+       '0-30天库龄数量','31-60天库龄数量','61-90天库龄数量','91-180天库龄数量',
+       '181-270天库龄数量','271-330天库龄数量','331-365天库龄数量','大于365天库龄数量','大于180天库存合计','历年同时期日销']
+        .forEach(k=>{r[k]=Number(r[k])||0;});
+      // Compute 5 DOS types
+      calcDOS(r);
+      r._id=i;if(r._manualPredict===undefined)r._manualPredict=false;r._orig=JSON.parse(JSON.stringify(r));
+    });
+    initNav();showDeptOverview();
+  }catch(e){
+    document.getElementById('mainContent').innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)">加载失败: '+e.message+'</div>';
+  }
+}
+
+function calcDOS(r){
+  calcPredictSales(r);
+  var ds=r['预估日销']||r['30天日均销量']||0.1;
+  r['国内在制DOS']=(r['国内在制']||0)/ds;
+  r['国内库存DOS']=(r['国内现货']||0)/ds;
+  r['在途DOS']=(r['FBA在途数量']||0)/ds;
+  r['FBA可售DOS']=(r['FBA在库数量']||0)/ds;
+  r['FBM可售DOS']=(r['fbm可售']||0)/ds;
+  // Health
+  r['国内在制健康度']=healthLabel(r['国内在制DOS']);
+  r['国内现货健康度']=healthLabel(r['国内库存DOS']);
+  r['在途健康度']=healthLabel(r['在途DOS']);
+  r['可售健康度']=healthLabel(Math.max(r['FBA可售DOS'],r['FBM可售DOS']));
+  // Totals
+  r['国内总库存']=(r['国内在制']||0)+(r['国内现货']||0);
+  r['总库存']=r['国内总库存']+(r['FBA在途数量']||0)+(r['FBA在库数量']||0)+(r['fbm可售']||0);
+  // Value
+  var pr=parseFloat(String(r['售价']||'$0').replace('$',''))||0;
+  r['海外现货货值']=(r['FBA在库数量']||0)*pr;
+  r['海外在途货值']=(r['FBA在途数量']||0)*pr;
+  r['国内现货货值']=(r['国内现货']||0)*pr;
+  r['国内在制货值']=(r['国内在制']||0)*pr;
+  // Aging >180 total
+  r['大于180天库存合计']=(r['181-270天库龄数量']||0)+(r['271-330天库龄数量']||0)+(r['331-365天库龄数量']||0)+(r['大于365天库龄数量']||0);
+}
+
+function healthLabel(dos){
+  if(dos<=0)return{lv:'gray',lb:'无库存',c:'bg-gray'};
+  if(dos<healthCfg.green)return{lv:'green',lb:'健康',c:'bg-g'};
+  if(dos<healthCfg.yellow)return{lv:'yellow',lb:'注意',c:'bg-y'};
+  if(dos<healthCfg.orange)return{lv:'orange',lb:'警告',c:'bg-o'};
+  return{lv:'red',lb:'滞销',c:'bg-r'};
+}
+
+// ============================================================
+// AGGREGATE (matches Excel report structure)
+// ============================================================
+function grpBy(k,d){var g={};d.forEach(function(r){var v=r[k]||'未知';if(!g[v])g[v]=[];g[v].push(r);});return g;}
+function sumF(rs,f){return rs.reduce(function(s,r){return s+(Number(r[f])||0);},0);}
+function wAvg(rs,f,wf){
+  var ts=0,w=0;
+  rs.forEach(function(r){var wt=Number(r[wf])||0,v=Number(r[f])||0;if(wt>0){ts+=wt;w+=v*wt;}});
+  return ts>0?w/ts:0;
+}
+function agg(rs){
+  var a={count:rs.length};
+  // DOS - weighted avg
+  a['国内在制DOS']=wAvg(rs,'国内在制DOS','预估日销');
+  a['国内库存DOS']=wAvg(rs,'国内库存DOS','预估日销');
+  a['在途DOS']=wAvg(rs,'在途DOS','预估日销');
+  a['FBA可售DOS']=wAvg(rs,'FBA可售DOS','预估日销');
+  a['FBM可售DOS']=wAvg(rs,'FBM可售DOS','预估日销');
+  // Health
+  a['国内在制健康度']=healthLabel(a['国内在制DOS']);
+  a['国内现货健康度']=healthLabel(a['国内库存DOS']);
+  a['在途健康度']=healthLabel(a['在途DOS']);
+  a['可售健康度']=healthLabel(Math.max(a['FBA可售DOS'],a['FBM可售DOS']));
+  // Sales
+  a['预估日销']=sumF(rs,'预估日销');
+  a['7天日均']=sumF(rs,'7天日均销量');
+  a['14天日均']=sumF(rs,'14天日均销量');
+  a['30天日均']=sumF(rs,'30天日均销量');
+  a['历年同期']=sumF(rs,'历年同时期日销');
+  // Inventory
+  a['国内在制']=sumF(rs,'国内在制');a['国内现货']=sumF(rs,'国内现货');
+  a['国内总库存']=sumF(rs,'国内总库存');
+  a['FBA在途数量']=sumF(rs,'FBA在途数量');a['FBA在库数量']=sumF(rs,'FBA在库数量');
+  a['fbm可售']=sumF(rs,'fbm可售');a['总库存']=sumF(rs,'总库存');
+  // Value
+  a['海外现货货值']=sumF(rs,'海外现货货值');a['海外在途货值']=sumF(rs,'海外在途货值');
+  a['国内现货货值']=sumF(rs,'国内现货货值');a['国内在制货值']=sumF(rs,'国内在制货值');
+  // Aging
+  a['大于180天库存合计']=sumF(rs,'大于180天库存合计');
+  ['0-30天库龄数量','31-60天库龄数量','61-90天库龄数量','91-180天库龄数量',
+   '181-270天库龄数量','271-330天库龄数量','331-365天库龄数量','大于365天库龄数量']
+    .forEach(function(k){a[k]=sumF(rs,k);});
+  return a;
+}
+
+// ============================================================
+// NAV
+// ============================================================
+function initNav(){
+  var depts=grpBy('部门',skuData);
+  var t=document.getElementById('navTree');
+  var h='<div class="nav-item active" data-level="dept" data-dept="" onclick="navClick(this,\'dept\',\'\')"><div class="row"><span class="icon">🏢</span> 全公司总计 <span class="badge">'+skuData.length+'</span></div></div>';
+  Object.entries(depts).forEach(function(e){
+    var d=e[0],rs=e[1],sts=grpBy('店铺',rs);
+    h+='<div class="nav-item" data-level="dept" data-dept="'+esc(d)+'" onclick="navClick(this,\'dept\',\''+esc(d)+'\')"><div class="row"><span class="icon">📂</span> <span class="nav-label">'+esc(d)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;dept&#39;,&#39;'+esc(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+rs.length+'</span></div><div class="nav-children">';
+    Object.entries(sts).forEach(function(e2){
+      var s=e2[0],srs=e2[1],sps=grpBy('spu',srs);
+      h+='<div class="nav-item" data-level="store" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" onclick="event.stopPropagation();navClick(this,\'store\',\''+esc(d)+'\',\''+esc(s)+'\')"><div class="row"><span class="icon">🏪</span> <span class="nav-label">'+esc(s)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;store&#39;,&#39;'+esc(s)+'&#39;,&#39;'+esc(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+srs.length+'</span></div><div class="nav-children">';
+      Object.entries(sps).forEach(function(e3){
+        var sp=e3[0],prs=e3[1];
+        h+='<div class="nav-item" data-level="spu" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" data-spu="'+esc(sp)+'" onclick="event.stopPropagation();navClick(this,\'spu\',\''+esc(d)+'\',\''+esc(s)+'\',\''+esc(sp)+'\')"><div class="row"><span class="icon">📦</span> <span class="nav-label">'+esc(sp)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;spu&#39;,&#39;'+esc(sp)+'&#39;,&#39;'+esc(d)+'&#39;,&#39;'+esc(s)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+prs.length+'</span></div></div>';
+      });
+      h+='</div></div>';
+    });
+    h+='</div></div>';
+  });
+  t.innerHTML=h;
+}
+function navClick(el,level,dept,store,spu){
+  if(el.querySelector('.nav-children'))el.classList.toggle('expanded');
+  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
+  el.classList.add('active');
+  currentView={level:level,dept:dept,store:store,spu:spu};
+  renderView();
+  var p=['📋'];if(dept)p.push(dept);if(store)p.push(store);if(spu)p.push(spu);if(p.length===1)p.push('部门总览');
+  document.getElementById('breadcrumb').innerHTML=p.join(' › ');
+}
+function findNav(lv,d,s,sp){
+  var els=document.querySelectorAll('.nav-item');
+  for(var i=0;i<els.length;i++){
+    var el=els[i];
+    if(el.dataset.level===lv&&el.dataset.dept===d&&(!s||el.dataset.store===s)&&(!sp||el.dataset.spu===sp))return el;
+  }
+  return els[0];
+}
+
+// ============================================================
+// VIEW DISPATCH
+// ============================================================
+function renderView(){
+  var lv=currentView.level,dept=currentView.dept,store=currentView.store,spu=currentView.spu;
+  var f=skuData.slice();
+  if(dept)f=f.filter(function(r){return r['部门']===dept;});
+  if(store)f=f.filter(function(r){return r['店铺']===store;});
+  if(spu)f=f.filter(function(r){return r['spu']===spu;});
+  if(lv==='dept'&&!dept)renderDept();
+  else if(lv==='dept'&&dept&&!store)renderStore(dept,f);
+  else if(lv==='store'&&store&&!spu)renderSPU(dept,store,f);
+  else if(lv==='spu'&&spu)renderSKU(dept,store,spu,f);
+}
+function showDeptOverview(){currentView={level:'dept',dept:null,store:null,spu:null};renderDept();}
+
+// ============================================================
+// KPI CARDS (6 key metrics)
+// ============================================================
+function kpis(a){
+  var tv=(a.海外现货货值||0)+(a.海外在途货值||0)+(a.国内现货货值||0)+(a.国内在制货值||0);
+  var dos=a.FBA可售DOS||a.国内库存DOS||0;
+  var h=healthLabel(dos);
+  var ar=a.总库存>0?((a.大于180天库存合计||0)/a.总库存*100):0;
+  return '<div class="kpi-row">'+
+    '<div class="kpi-card k-inv"><div class="lbl">SKU数量</div><div class="val">'+(a.count||0)+'</div></div>'+
+    '<div class="kpi-card k-inv"><div class="lbl" >总库存</div><div class="val">'+fmt(a.总库存)+'</div><div class="sub">国内: '+fmt(a.国内总库存)+' 件</div></div>'+
+    '<div class="kpi-card k-sales"><div class="lbl">预计日销合计</div><div class="val">'+fmt(a.预估日销)+'</div><div class="sub">件/天</div></div>'+
+    '<div class="kpi-card k-dos"><div class="lbl">可售DOS (FBA+FBM)</div><div class="val">'+dos.toFixed(1)+'<small style="font-size:12px">天</small></div><div class="sub"><span class="badge '+h.c+'">'+h.lb+'</span></div></div>'+
+    '<div class="kpi-card k-val"><div class="lbl">库存总货值</div><div class="val">'+fmtM(tv)+'</div></div>'+
+    '<div class="kpi-card k-age" style="border-left-color:'+(ar>20?'#e11d48':ar>10?'#f59e0b':'#10b981')+'"><div class="lbl" style="color:'+(ar>20?'#e11d48':ar>10?'#f59e0b':'#10b981')+'">长库龄占比 &gt;180天</div><div class="val">'+ar.toFixed(1)+'%</div><div class="sub">'+fmt(a.大于180天库存合计||0)+' 件</div></div>'+
+  '</div>';
+}
+
+// ============================================================
+// AGGREGATE TABLE (exact Excel report columns)
+// ============================================================
+function aggTbl(title,rows,type){
+  var h='<div class="panel"><div class="panel-hd">📋 '+title+'<span class="hint">点击名称下钻 · 横向滚动查看全部</span></div><div class="panel-bd"><table><thead>';
+
+  // Section group headers
+  h+='<tr class="sec-hd">';
+  h+='<th class="sh-basic" colspan="2">基本信息</th>';
+  h+='<th class="sh-dos" colspan="5">DOS指标</th>';
+  h+='<th class="sh-health" colspan="4">健康度</th>';
+  h+='<th class="sh-sales" colspan="1">预计日销</th>';
+  h+='<th class="sh-avg" colspan="4">日均销量</th>';
+  h+='<th class="sh-inv" colspan="7">库存数据</th>';
+  h+='<th class="sh-val" colspan="4">货值数据</th>';
+  h+='<th class="sh-age" colspan="9">库龄数据</th>';
+  h+='</tr>';
+
+  // Column headers
+  h+='<tr class="col-hd">';
+  h+='<th class="col-l ch-basic">'+(type==='dept'?'部门':type==='store'?'店铺':'SPU')+'</th><th class="ch-basic">SKU数</th>';
+  h+='<th class="ch-dos">国内在制<br>DOS</th><th class="ch-dos">国内库存<br>DOS</th><th class="ch-dos">在途<br>DOS</th><th class="ch-dos">FBA可售<br>DOS</th><th class="ch-dos">FBM可售<br>DOS</th>';
+  h+='<th class="ch-health">国内在制<br>健康度</th><th class="ch-health">国内现货<br>健康度</th><th class="ch-health">在途<br>健康度</th><th class="ch-health">可售<br>健康度</th>';
+  h+='<th class="ch-sales">预计日销✏️</th>';
+  h+='<th class="ch-avg">7天日均</th><th class="ch-avg">14天日均</th><th class="ch-avg">30天日均</th><th class="ch-avg">历年同期</th>';
+  h+='<th class="ch-inv">国内在制</th><th class="ch-inv">国内现货</th><th class="ch-inv">国内总库存</th><th class="ch-inv">FBA在途</th><th class="ch-inv">FBA在库</th><th class="ch-inv">fbm可售</th><th class="ch-inv" >总库存</th>';
+  h+='<th class="ch-val">海外现货<br>货值</th><th class="ch-val">海外在途<br>货值</th><th class="ch-val">国内现货<br>货值</th><th class="ch-val">国内在制<br>货值</th>';
+  h+='<th class="ch-age">0-30天</th><th class="ch-age">31-60天</th><th class="ch-age">61-90天</th><th class="ch-age">91-180天</th><th class="ch-age">181-270天</th><th class="ch-age">271-330天</th><th class="ch-age">331-365天</th><th class="ch-age">&gt;365天</th><th class="ch-age">操作</th>';
+  h+='</tr></thead><tbody>';
+
+  rows.forEach(function(item){
+    var name=item.name,a=item.agg,data=item.data;
+    var tv=(a.海外现货货值||0)+(a.海外在途货值||0)+(a.国内现货货值||0)+(a.国内在制货值||0);
+    var clk;
+    if(type==='dept'){
+      clk="navClick(findNav('dept','"+esc(name)+"'),'dept','"+esc(name)+"')";
+    }else if(type==='store'){
+      clk="navClick(findNav('store','"+esc(data[0]['部门'])+"','"+esc(name)+"'),'store','"+esc(data[0]['部门'])+"','"+esc(name)+"')";
+    }else{
+      clk="navClick(findNav('spu','"+esc(data[0]['部门'])+"','"+esc(data[0]['店铺'])+"','"+esc(name)+"'),'spu','"+esc(data[0]['部门'])+"','"+esc(data[0]['店铺'])+"','"+esc(name)+"')";
+    }
+    h+='<tr>'+
+      '<td><span class="drill-link" onclick="'+clk+'">'+esc(name)+'</span></td><td>'+a.count+'</td>'+
+      '<td>'+(a.国内在制DOS||0).toFixed(1)+'</td><td>'+(a.国内库存DOS||0).toFixed(1)+'</td><td>'+(a.在途DOS||0).toFixed(1)+'</td><td>'+(a.FBA可售DOS||0).toFixed(1)+'</td><td>'+(a.FBM可售DOS||0).toFixed(1)+'</td>'+
+      '<td><span class="badge '+a.国内在制健康度.c+'">'+a.国内在制健康度.lb+'</span></td>'+
+      '<td><span class="badge '+a.国内现货健康度.c+'">'+a.国内现货健康度.lb+'</span></td>'+
+      '<td><span class="badge '+a.在途健康度.c+'">'+a.在途健康度.lb+'</span></td>'+
+      '<td><span class="badge '+a.可售健康度.c+'">'+a.可售健康度.lb+'</span></td>'+
+      '<td>'+fmt(a.预估日销)+'</td>'+
+      '<td>'+fmt(a['7天日均'])+'</td><td>'+fmt(a['14天日均'])+'</td><td>'+fmt(a['30天日均'])+'</td><td>'+fmt(a['历年同期']||0)+'</td>'+
+      '<td>'+fmt(a.国内在制)+'</td><td>'+fmt(a.国内现货)+'</td><td>'+fmt(a.国内总库存)+'</td><td>'+fmt(a.FBA在途数量)+'</td><td>'+fmt(a.FBA在库数量)+'</td><td>'+fmt(a.fbm可售)+'</td><td>'+fmt(a.总库存)+'</td>'+
+      '<td>'+fmtM(a.海外现货货值)+'</td><td>'+fmtM(a.海外在途货值)+'</td><td>'+fmtM(a.国内现货货值)+'</td><td>'+fmtM(a.国内在制货值)+'</td>'+
+      '<td>'+fmt(a['0-30天库龄数量'])+'</td><td>'+fmt(a['31-60天库龄数量'])+'</td><td>'+fmt(a['61-90天库龄数量'])+'</td><td>'+fmt(a['91-180天库龄数量'])+'</td><td>'+fmt(a['181-270天库龄数量'])+'</td><td>'+fmt(a['271-330天库龄数量'])+'</td><td>'+fmt(a['331-365天库龄数量'])+'</td><td style="color:'+(a['大于365天库龄数量']>0?'#e11d48':'inherit')+'">'+fmt(a['大于365天库龄数量'])+'</td>'+
+      '<td>'+
+      (type==='dept'
+        ?'<button class="btn btn-xs" onclick="deleteDept(\''+esc(name)+'\')" title="删除部门" style="color:#e11d48">🗑️</button>'
+        :type==='store'
+        ?'<button class="btn btn-xs" onclick="deleteStore(\''+esc(data[0]['部门'])+'\',\''+esc(name)+'\')" title="删除店铺" style="color:#e11d48">🗑️</button>'
+        :'<button class="btn btn-xs" onclick="deleteSPU(\''+esc(data[0]['部门'])+'\',\''+esc(data[0]['店铺'])+'\',\''+esc(name)+'\')" title="删除SPU" style="color:#e11d48">🗑️</button>')+
+      '</td>'+
+    '</tr>';
+  });
+  h+='</tbody></table></div></div>';
+  return h;
+}
+
+// ============================================================
+// SKU DETAIL TABLE (exact Excel SKU detail columns, ALL editable)
+// ============================================================
+function skuTbl(data){
+  var h='<div class="panel"><div class="panel-hd">📋 SKU明细<span class="hint">'+data.length+'条 | 黄色可编辑 | 横向滚动查看全部</span></div><div class="panel-bd"><table><thead>';
+
+  // Section headers
+  h+='<tr class="sec-hd">';
+  h+='<th class="sh-basic" colspan="5">基本信息</th>';
+  h+='<th class="sh-inv" colspan="7">库存数据</th>';
+  h+='<th class="sh-sales" colspan="1">预计日销</th>';
+  h+='<th class="sh-avg" colspan="4">日均销量</th>';
+  h+='<th class="sh-val" colspan="4">货值数据</th>';
+  h+='<th class="sh-age" colspan="9">库龄数据</th>';
+  h+='<th class="sh-dos" colspan="5">DOS指标</th>';
+  h+='<th class="sh-health" colspan="5">健康度</th>';
+  h+='</tr>';
+  h+='<tr class="col-hd">';
+  h+='<th class="col-l ch-basic" >SKU</th><th class="ch-basic">SPU</th><th class="ch-basic" >品名</th><th class="ch-basic">国家</th><th class="ch-basic">部门</th>';
+  h+='<th class="ch-inv">国内在制✏️</th><th class="ch-inv">国内现货✏️</th><th class="ch-inv">国内总库存</th><th class="ch-inv">FBA在途✏️</th><th class="ch-inv">FBA在库✏️</th><th class="ch-inv">fbm可售✏️</th><th class="ch-inv" >总库存</th>';
+  h+='<th class="ch-sales">预计日销✏️</th>';
+  h+='<th class="ch-avg">7天日均✏️</th><th class="ch-avg">14天日均✏️</th><th class="ch-avg">30天日均✏️</th><th class="ch-avg">历年同期✏️</th>';
+  h+='<th class="ch-val">海外现货<br>货值</th><th class="ch-val">海外在途<br>货值</th><th class="ch-val">国内现货<br>货值</th><th class="ch-val">国内在制<br>货值</th>';
+  h+='<th class="ch-age">0-30✏️</th><th class="ch-age">31-60✏️</th><th class="ch-age">61-90✏️</th><th class="ch-age">91-180✏️</th><th class="ch-age">181-270✏️</th><th class="ch-age">271-330✏️</th><th class="ch-age">331-365✏️</th><th class="ch-age">&gt;365✏️</th><th class="ch-age">&gt;180</th>';
+  h+='<th class="ch-dos">国内在制<br>DOS</th><th class="ch-dos">国内库存<br>DOS</th><th class="ch-dos">在途<br>DOS</th><th class="ch-dos">FBA可售<br>DOS</th><th class="ch-dos">FBM可售<br>DOS</th>';
+  h+='<th class="ch-health">国内在制<br>健康度</th><th class="ch-health">国内现货<br>健康度</th><th class="ch-health">在途<br>健康度</th><th class="ch-health">可售<br>健康度</th>';
+  h+='<th class="ch-health">操作</th>';
+  h+='</tr></thead><tbody>';
+
+  data.forEach(function(r){
+    var ed=function(f){return '<span class="ed" contenteditable="true" data-f="'+f+'" data-id="'+r._id+'" onblur="onEdit(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}">'+fmt(r[f]||0)+'</span>';};
+    var tv=(r.海外现货货值||0)+(r.海外在途货值||0)+(r.国内现货货值||0)+(r.国内在制货值||0);
+
+    h+='<tr id="r-'+r._id+'">'+
+      '<td>'+esc(r.SKU||'')+'</td><td>'+esc(r.spu||'')+'</td><td>'+esc(r.品名||'')+'</td><td>'+esc(r.国家||'')+'</td><td>'+esc(r.部门||'')+'</td>'+
+      '<td>'+ed('国内在制')+'</td><td>'+ed('国内现货')+'</td><td>'+fmt(r.国内总库存||0)+'</td><td>'+ed('FBA在途数量')+'</td><td>'+ed('FBA在库数量')+'</td><td>'+ed('fbm可售')+'</td><td>'+fmt(r.总库存||0)+'</td>'+
+      '<td>'+ed('预估日销')+'</td>'+
+      '<td>'+ed('7天日均销量')+'</td><td>'+ed('14天日均销量')+'</td><td>'+ed('30天日均销量')+'</td><td>'+ed('历年同时期日销')+'</td>'+
+      '<td>'+fmtM(r.海外现货货值)+'</td><td>'+fmtM(r.海外在途货值)+'</td><td>'+fmtM(r.国内现货货值)+'</td><td>'+fmtM(r.国内在制货值)+'</td>'+
+      '<td>'+ed('0-30天库龄数量')+'</td><td>'+ed('31-60天库龄数量')+'</td><td>'+ed('61-90天库龄数量')+'</td><td>'+ed('91-180天库龄数量')+'</td><td>'+ed('181-270天库龄数量')+'</td><td>'+ed('271-330天库龄数量')+'</td><td>'+ed('331-365天库龄数量')+'</td><td>'+ed('大于365天库龄数量')+'</td><td>'+fmt(r.大于180天库存合计||0)+'</td>'+
+      '<td>'+(r.国内在制DOS||0).toFixed(1)+'</td><td>'+(r.国内库存DOS||0).toFixed(1)+'</td><td>'+(r.在途DOS||0).toFixed(1)+'</td><td>'+(r.FBA可售DOS||0).toFixed(1)+'</td><td>'+(r.FBM可售DOS||0).toFixed(1)+'</td>'+
+      '<td><span class="badge '+(r.国内在制健康度||healthLabel(0)).c+'">'+(r.国内在制健康度||healthLabel(0)).lb+'</span></td>'+
+      '<td><span class="badge '+(r.国内现货健康度||healthLabel(0)).c+'">'+(r.国内现货健康度||healthLabel(0)).lb+'</span></td>'+
+      '<td><span class="badge '+(r.在途健康度||healthLabel(0)).c+'">'+(r.在途健康度||healthLabel(0)).lb+'</span></td>'+
+      '<td><span class="badge '+(r.可售健康度||healthLabel(0)).c+'">'+(r.可售健康度||healthLabel(0)).lb+'</span></td>'+
+      '<td><button class="btn btn-xs" onclick="editModal('+r._id+')" title="编辑">✏️</button> <button class="btn btn-xs" onclick="deleteSKU('+r._id+')" title="删除" style="color:#e11d48">🗑️</button></td>'+
+    '</tr>';
+  });
+  h+='</tbody></table></div></div>';
+  return h;
+}
+
+function showSKUDetail(dept,store,spu){
+  var item=document.querySelector('.nav-item[data-level="spu"][data-dept="'+esc(dept)+'"][data-store="'+esc(store)+'"][data-spu="'+esc(spu)+'"]');
+  if(item) navClick(item,'spu',dept,store,spu);
+}
+
+// ============================================================
+// RENDERERS
+// ============================================================
+function charts(data){
+  return '<div class="chart-row">'+
+    '<div class="panel"><div class="panel-hd">📊 DOS分布 (可售综合)</div><div class="panel-bd"><div class="chart-wrap"><canvas id="cDOS"></canvas></div></div></div>'+
+    '<div class="panel"><div class="panel-hd">📦 库龄结构</div><div class="panel-bd"><div class="chart-wrap"><canvas id="cAge"></canvas></div></div></div>'+
+  '</div>';
+}
+function initCharts(data){
+  var c1=document.getElementById('cDOS');
+  if(c1){
+    if(c1._c)c1._c.destroy();
+    var b={'健康<30天':0,'注意30-60':0,'警告60-90':0,'滞销>90天':0,'无库存':0};
+    data.forEach(function(r){
+      var d=Math.max(r.FBA可售DOS||0,r.FBM可售DOS||0,r.国内库存DOS||0);
+      if(d<=0)b['无库存']++;else if(d<30)b['健康<30天']++;else if(d<60)b['注意30-60']++;else if(d<90)b['警告60-90']++;else b['滞销>90天']++;
+    });
+    c1._c=new Chart(c1,{type:'doughnut',data:{labels:Object.keys(b),datasets:[{data:Object.values(b),backgroundColor:['#10b981','#f59e0b','#f97316','#ef4444','#94a3b8'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{padding:10,font:{size:10}}}}}});
+  }
+  var c2=document.getElementById('cAge');
+  if(c2){
+    if(c2._c)c2._c.destroy();
+    var lbs=['0-30','31-60','61-90','91-180','181-270','271-330','331-365','>365'];
+    var fds=['0-30天库龄数量','31-60天库龄数量','61-90天库龄数量','91-180天库龄数量','181-270天库龄数量','271-330天库龄数量','331-365天库龄数量','大于365天库龄数量'];
+    var vs=fds.map(function(f){return data.reduce(function(s,r){return s+(Number(r[f])||0);},0);});
+    c2._c=new Chart(c2,{type:'bar',data:{labels:lbs,datasets:[{label:'库存',data:vs,backgroundColor:['#dbeafe','#93c5fd','#60a5fa','#3b82f6','#f59e0b','#f97316','#ef4444','#dc2626'],borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  }
+}
+
+// ============================================================
+// SKU 库存预警引擎
+// ============================================================
+
+// ============================================================
+// SKU 库存预警引擎 — 用户可配置阈值
+// ============================================================
+// 默认阈值: [紧急上限, 高风险上限, 中风险上限, 关注上限] (天)
+// DOS值<=上限 触发对应级别; 在途DOS方向相反(值大=危险)
+var alertCfg={
+  dosWIP:[3,7,15,30],        // 国内在制DOS
+  dosDomestic:[3,7,15,30],   // 国内库存DOS
+  dosTransit:[3,7,15,30],   // 在途DOS
+  dosFBA:[3,7,15,30],        // FBA可售DOS
+  dosFBM:[3,7,15,30],        // FBM可售DOS
+  transitReverse:false         // 在途DOS方向: true=值越大越危险
+};
+
+function loadAlertCfg(){
+  try{var s=localStorage.getItem("healthCfg");if(s){var c=JSON.parse(s);for(var k in c)healthCfg[k]=c[k];}}catch(e){}
+  try{var saved=localStorage.getItem("alertCfg");if(saved){var c=JSON.parse(saved);for(var k in c)alertCfg[k]=c[k];}}catch(e){}
+}
+function saveAlertCfg(){
+  try{localStorage.setItem("healthCfg",JSON.stringify(healthCfg));}catch(e){}
+  try{localStorage.setItem("alertCfg",JSON.stringify(alertCfg));}catch(e){}
+}
+loadAlertCfg();
+loadPredictCfg();
+
+var predictCfg={w7:0.10,w14:0.20,w30:0.30,whist:0.40};
+function loadPredictCfg(){
+  try{var s=localStorage.getItem("predictCfg");if(s){var c=JSON.parse(s);for(var k in c)predictCfg[k]=c[k];}}catch(e){}
+}
+function savePredictCfg(){
+  try{localStorage.setItem("predictCfg",JSON.stringify(predictCfg));}catch(e){}
+}
+function calcPredictSales(r){
+  if(r._manualPredict)return; // 用户手动设置了预计日销，不自动覆盖
+  var v7=r["7天日均销量"]||0;
+  var v14=r["14天日均销量"]||0;
+  var v30=r["30天日均销量"]||0;
+  var vhist=r["历年同时期日销"]||0;
+  var totalW=0, totalV=0;
+  if(v7>0){totalW+=predictCfg.w7; totalV+=v7*predictCfg.w7;}
+  if(v14>0){totalW+=predictCfg.w14; totalV+=v14*predictCfg.w14;}
+  if(v30>0){totalW+=predictCfg.w30; totalV+=v30*predictCfg.w30;}
+  if(vhist>0){totalW+=predictCfg.whist; totalV+=vhist*predictCfg.whist;}
+  if(totalW>0)r["预估日销"]=Math.round(totalV/totalW*100)/100;
+  else r["预估日销"]=v30||v14||v7||0.1;
+}
+loadPredictCfg();
+
+
+var opLog=[];
+function logOp(action,detail){opLog.push({time:new Date().toLocaleString(),action:action,detail:detail});if(opLog.length>200)opLog.shift();try{localStorage.setItem("opLog",JSON.stringify(opLog));}catch(e){}try{refreshLog();}catch(e){}}
+try{var savedLog=localStorage.getItem("opLog");if(savedLog)opLog=JSON.parse(savedLog);}catch(e){}
+
+function saveData(){
+  try{
+    var d=skuData.map(function(r){var o={};for(var k in r){if(k!=='_orig'&&k!=='_id')o[k]=r[k];}return o;});
+    localStorage.setItem("skuData",JSON.stringify(d));
+    var toast=document.getElementById("toast");
+    toast.innerHTML='<div style="font-size:14px;margin-bottom:4px">已保存</div><div style="font-size:11px;opacity:0.8">'+d.length+'条SKU已存入本地</div>';
+    toast.className="toast ok";toast.classList.add("show");
+    clearTimeout(toast._t);toast._t=setTimeout(function(){toast.classList.remove("show");},3000);
+  }catch(e){showToast("保存失败: "+e.message);}
+}
+var _autoSaveTimer=null;
+function autoSave(){
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer=setTimeout(function(){
+    try{
+      var d=skuData.map(function(r){var o={};for(var k in r){if(k!=='_orig'&&k!=='_id')o[k]=r[k];}return o;});
+      localStorage.setItem("skuData",JSON.stringify(d));
+      var badge=document.getElementById("autoSaveBadge");
+      if(badge){badge.textContent="已自动保存";badge.style.color="#10b981";
+        setTimeout(function(){if(badge)badge.textContent="";},2000);}
+    }catch(e){}
+  },500);
+}
+function loadSavedData(){
+  try{
+    var s=localStorage.getItem("skuData");
+    if(!s)return false;
+    var d=JSON.parse(s);
+    if(!d.length)return false;
+    skuData=d;
+    skuData.forEach(function(r,i){
+      ["预估日销","7天日均销量","14天日均销量","30天日均销量","国内在制","国内现货","国内总库存","FBA在途数量","FBA在库数量","fbm可售","总库存","海外现货货值","海外在途货值","国内现货货值","国内在制货值","0-30天库龄数量","31-60天库龄数量","61-90天库龄数量","91-180天库龄数量","181-270天库龄数量","271-330天库龄数量","331-365天库龄数量","大于365天库龄数量","大于180天库存合计","历年同时期日销"].forEach(function(k){r[k]=Number(r[k])||0;});
+      if(r._manualPredict===undefined)r._manualPredict=false;
+      calcDOS(r);r._id=i;r._orig=JSON.parse(JSON.stringify(r));
+    });
+    return true;
+  }catch(e){return false;}
+}
+function toggleLog(){
+  var p=document.getElementById("logPanel");
+  if(p.style.display==="none"||!p.style.display){p.style.display="block";refreshLog();}
+  else p.style.display="none";
+}
+function refreshLog(){
+  var lst=document.getElementById("logList");if(!lst)return;
+  var h="";for(var i=opLog.length-1;i>=0;i--){var l=opLog[i];h+="<div style='padding:2px 0;border-bottom:1px solid #334155'><span style='color:#94a3b8'>"+l.time+"</span> <span style='color:#38bdf8'>"+l.action+"</span> "+esc(l.detail)+"</div>";}
+  lst.innerHTML=h||"<div style='color:#64748b'>暂无操作记录</div>";
+  var c=document.getElementById("logCount");if(c)c.textContent=opLog.length+"条";
+}
+
+
+function updatePwSum(){
+  var s=0;["w7","w14","w30","whist"].forEach(function(k){var el=document.getElementById("pw_"+k);if(el)s+=parseInt(el.value)||0;});
+  var sumEl=document.getElementById("pwSum");if(sumEl)sumEl.textContent="合计: "+s+"%"+(s===100?"":" (建议调整为100%)");
+}
+
+function openAlertSettings(){
+  var labels=["国内在制DOS","国内库存DOS","在途DOS","FBA可售DOS","FBM可售DOS"];
+  var keys=["dosWIP","dosDomestic","dosTransit","dosFBA","dosFBM"];
+  var levelNames=["🔴 紧急 ≤","🟠 高风险 ≤","🟡 中风险 ≤","🔵 关注 ≤"];
+  var h="<h3>⚙️ 参数设置</h3>";
+  h+="<div style='font-size:10px;color:var(--text2);margin-bottom:10px'><div style='font-weight:700;font-size:12px;margin-top:8px'>📐 DOS预警阈值</div><div style='font-size:10px;color:var(--text2);margin-bottom:6px'>对每个DOS指标设置四级阈值。所有有库存的DOS同时≤对应阈值才触发该等级预警。</div></div>";
+  h+="<div style='overflow-x:auto'><table style='font-size:10px;width:100%;border-collapse:collapse'>";
+  h+="<tr style='background:#f8fafc'><th style='padding:6px;text-align:left;border-bottom:2px solid var(--border)'>DOS指标</th>";
+  levelNames.forEach(function(ln){h+="<th style='padding:6px;text-align:center;border-bottom:2px solid var(--border)'>"+ln+" (天)</th>";});
+  h+="</tr>";
+
+  keys.forEach(function(key,i){
+    
+    h+="<tr><td style='padding:5px;font-weight:600;border-bottom:1px solid #f1f5f9'>"+labels[i]+"</td>";
+    for(var j=0;j<4;j++){
+      h+="<td style='padding:4px;text-align:center;border-bottom:1px solid #f1f5f9'><input type='number' step='0.5' id='cfg_"+key+"_"+j+"' value='"+alertCfg[key][j]+"' style='width:60px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:11px' /></td>";
+    }
+    h+="</tr>";
+  });
+  h+="</table></div>";
+
+  // Health thresholds section
+  h+="<div style='margin-top:14px;font-weight:700;font-size:12px'>💚 健康度阈值设置</div>";
+  h+="<div style='font-size:10px;color:var(--text2);margin-bottom:6px'>各层级表格中DOS健康度标签的颜色判定标准</div>";
+  h+="<div style='display:flex;gap:12px;flex-wrap:wrap'>";
+  [
+    {l:'🟢 健康 <',k:'green',d:healthCfg.green},
+    {l:'🟡 注意 <',k:'yellow',d:healthCfg.yellow},
+    {l:'🟠 警告 <',k:'orange',d:healthCfg.orange}
+  ].forEach(function(x){
+    h+="<div style='display:flex;align-items:center;gap:4px'><span style='font-size:10px;white-space:nowrap'>"+x.l+"</span><input type='number' step='1' id='health_"+x.k+"' value='"+x.d+"' style='width:55px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:11px' /><span style='font-size:10px'>天</span></div>";
+  });
+  h+="<div style='font-size:10px;color:var(--text2)'>≥橙色阈值=🔴滞销</div>";
+  h+="</div>";
+
+  // Weight formula section
+  h+="<div style='margin-top:14px;font-weight:700;font-size:12px'>📐 日销预测公式</div>";
+  h+="<div style='font-size:10px;color:var(--text2);margin-bottom:6px'>预计日销 = 各期日销 x 权重（有数据的期间才计入）</div>";
+  h+="<div style='display:flex;gap:10px;flex-wrap:wrap'>";
+  [
+    {l:'7天日均',k:'w7',d:Math.round(predictCfg.w7*100)},
+    {l:'14天日均',k:'w14',d:Math.round(predictCfg.w14*100)},
+    {l:'30天日均',k:'w30',d:Math.round(predictCfg.w30*100)},
+    {l:'历年同期',k:'whist',d:Math.round(predictCfg.whist*100)}
+  ].forEach(function(x){
+    h+="<div style='display:flex;align-items:center;gap:3px'><span style='font-size:10px;white-space:nowrap'>"+x.l+"</span><input type='number' step='5' min='0' max='100' id='pw_"+x.k+"' value='"+x.d+"' style='width:50px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:11px' onchange='updatePwSum()' /><span style='font-size:10px'>%</span></div>";
+  });
+  h+="<span style='font-size:10px;color:var(--text2)' id='pwSum'>合计: 100%</span>";
+  h+="</div>";
+
+  h+="<div style='margin-top:10px;font-size:10px;color:var(--text2)'>阈值和权重保存到浏览器本地存储，下次打开页面自动加载。</div>";
+  h+="<div class='f-acts' style='margin-top:10px'>";
+  h+="<button class='btn' onclick='resetAlertCfg()'>↩️ 恢复默认</button>";
+  h+="<button class='btn' onclick='clsModal()'>取消</button>";
+  h+="<button class='btn btn-pri' onclick='saveAlertSettings()'>💾 保存并刷新预警</button>";
+  h+="</div>";
+
+  document.getElementById("editModalContent").innerHTML=h;
+  document.getElementById("editModal").style.display="flex";
+}
+
+function saveAlertSettings(){
+  // Save health thresholds
+  ["green","yellow","orange"].forEach(function(k){var inp=document.getElementById("health_"+k);if(inp)healthCfg[k]=parseFloat(inp.value)||healthCfg[k];});
+  var pwSum=0;["w7","w14","w30","whist"].forEach(function(k){var inp=document.getElementById("pw_"+k);if(inp){var v=parseInt(inp.value)||0;predictCfg[k]=v/100;pwSum+=v;}});
+  if(pwSum>0&&pwSum!==100){["w7","w14","w30","whist"].forEach(function(k){predictCfg[k]=predictCfg[k]/(pwSum/100);});}
+  savePredictCfg();
+  // Save DOS thresholds
+  var keys=["dosWIP","dosDomestic","dosTransit","dosFBA","dosFBM"];
+  keys.forEach(function(key){
+    for(var j=0;j<4;j++){
+      var inp=document.getElementById("cfg_"+key+"_"+j);
+      if(inp)alertCfg[key][j]=parseFloat(inp.value)||alertCfg[key][j];
+    }
+  });
+  saveAlertCfg();
+  clsModal();
+  refresh();
+  showToast("✅ 参数已保存，预警清单+健康度+预测公式已刷新");
+}
+
+function resetAlertCfg(){
+  if(!confirm("恢复默认阈值？"))return;
+  alertCfg={dosWIP:[3,7,15,30],dosDomestic:[3,7,15,30],dosTransit:[3,7,15,30],dosFBA:[3,7,15,30],dosFBM:[3,7,15,30],transitReverse:false};
+  predictCfg={w7:0.10,w14:0.20,w30:0.30,whist:0.40};savePredictCfg();
+  healthCfg={green:30,yellow:60,orange:90};
+  saveAlertCfg();
+  clsModal();
+  refresh();
+  showToast("↩️ 已恢复默认阈值（预警+健康度）");
+}
+
+function getAlerts(){
+  var alerts=[];
+  skuData.forEach(function(r){
+    var daily=r['预估日销']||r['30天日均销量']||0;
+    if(daily<=0)return;
+
+    // 5 DOS values + inventory quantities
+    var dos=[
+      {val:r['国内在制DOS']||0, qty:r['国内在制']||0, thKey:'dosWIP'},
+      {val:r['国内库存DOS']||0, qty:r['国内现货']||0, thKey:'dosDomestic'},
+      {val:r['在途DOS']||0,       qty:r['FBA在途数量']||0, thKey:'dosTransit'},
+      {val:r['FBA可售DOS']||0,    qty:r['FBA在库数量']||0, thKey:'dosFBA'},
+      {val:r['FBM可售DOS']||0,    qty:r['fbm可售']||0, thKey:'dosFBM'}
+    ];
+
+    // Count active DOS (qty>0, meaning this channel is actually in use)
+    var active=dos.filter(function(d){return d.qty>0;});
+
+    // Special: overseas sellable (FBA+FBM) both = 0 AND no transit → urgent
+    var sellable=(r['FBA在库数量']||0)+(r['fbm可售']||0);
+    var transit=r['FBA在途数量']||0;
+
+    var levelOrder=['urgent','high','medium','low'];
+    var labels={urgent:'紧急',high:'高风险',medium:'中风险',low:'关注'};
+    var bestLevel=null; // most severe level where ALL active DOS pass
+
+    // Check from most severe to least
+    for(var li=0;li<4;li++){
+      var lv=levelOrder[li];
+      var allPass=true;
+      var failed=[];
+      for(var di=0;di<dos.length;di++){
+        var d=dos[di];
+        if(d.qty<=0)continue; // skip inactive channels
+        var th=alertCfg[d.thKey][li]; // threshold for this DOS at this level
+        if(d.val>th){ // not below threshold → this level fails
+          allPass=false;
+          failed.push(d.thKey+':'+d.val.toFixed(1)+'>'+th);
+        }
+      }
+      if(allPass&&active.length>0){
+        bestLevel=lv;
+        break; // found the most severe matching level
+      }
+    }
+
+    // Special: overseas completely dried up = urgent regardless
+    if(sellable<=0&&transit<=0&&(!bestLevel||levelOrder[bestLevel]>0)){
+      bestLevel='urgent';
+    }
+
+    if(bestLevel){
+      var suggested=Math.max(0,Math.ceil(daily*60-sellable-transit));
+      alerts.push({
+        sku:r,level:bestLevel,label:labels[bestLevel],
+        reason:'',
+        dosWIP:r['国内在制DOS']||0,dosDomestic:r['国内库存DOS']||0,
+        dosTransit:r['在途DOS']||0,dosFBA:r['FBA可售DOS']||0,dosFBM:r['FBM可售DOS']||0,
+        wip:r['国内在制']||0,domestic:r['国内现货']||0,
+        transit:transit,fba:r['FBA在库数量']||0,fbm:r['fbm可售']||0,
+        sellable:sellable,daily:daily,suggested:suggested
+      });
+    }
+  });
+  var order={urgent:0,high:1,medium:2,low:3};
+  alerts.sort(function(a,b){return order[a.level]-order[b.level]||b.suggested-a.suggested;});
+  return alerts;
+}
+function renderAlerts(alerts){
+  if(!alerts.length)return'';
+  var counts={urgent:0,high:0,medium:0,low:0};
+  alerts.forEach(function(a){counts[a.level]++;});
+
+  var labels={urgent:'紧急',high:'高风险',medium:'中风险',low:'关注'};
+  var icons={urgent:'🔴',high:'🟠',medium:'🟡',low:'🔵'};
+  var priCls={urgent:'pri-urgent',high:'pri-high',medium:'pri-medium',low:'pri-low'};
+  var lvCls={urgent:'lv-urgent',high:'lv-high',medium:'lv-medium',low:'lv-low'};
+
+  var h='<div class="alert-panel">';
+  h+='<div class="alert-summary" onclick="var lst=this.nextElementSibling;lst.classList.toggle(\'open\');this.querySelector(\'.a-arrow\').textContent=lst.classList.contains(\'open\')?\'▼\':\'▶\'">';
+  h+='<div class="a-title">🔔 库存预警待办清单 <button class="btn btn-xs" onclick="event.stopPropagation();openAlertSettings()" title="设置阈值" style="margin-left:8px;font-size:10px">⚙️ 阈值</button></div>';
+  h+='<div class="a-counts">';
+  ['urgent','high','medium','low'].forEach(function(lv){
+    if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+icons[lv]+' '+counts[lv]+' '+labels[lv]+'</span>';
+  });
+  h+='<span class="a-arrow" style="color:var(--text2);margin-left:6px">▶</span>';
+  h+='</div></div>';
+
+  h+='<div class="alert-list">';
+  var colWidths=[
+    {w:'48px',a:'center',l:'优先级'},
+    {w:'110px',a:'left',l:'SKU'},
+    {w:'65px',a:'left',l:'品名'},
+    {w:'60px',a:'left',l:'店铺'},
+    {w:'56px',a:'right',l:'国内<br>在制DOS'},
+    {w:'56px',a:'right',l:'国内<br>库存DOS'},
+    {w:'52px',a:'right',l:'在途<br>DOS'},
+    {w:'56px',a:'right',l:'FBA<br>可售DOS'},
+    {w:'56px',a:'right',l:'FBM<br>可售DOS'},
+    {w:'50px',a:'right',l:'日销<br>/天'},
+    {w:'62px',a:'right',l:'📦建议<br>补货'},
+    
+  ];
+
+  // Fixed header row
+  h+='<div style="overflow:hidden;border-bottom:2px solid var(--border);background:#f8fafc;display:flex;align-items:center;font-size:10px;font-weight:600;color:var(--text2);min-width:fit-content">';
+  colWidths.forEach(function(c){
+    h+='<div style="width:'+c.w+';text-align:'+c.a+';padding:5px 3px;flex-shrink:0">'+c.l+'</div>';
+  });
+  h+='</div>';
+
+  // Scrollable body
+  h+='<div style="max-height:340px;overflow-y:auto;min-width:fit-content">';
+  alerts.forEach(function(a){
+    var cDOS=function(v,th){if(v<=0)return'#dc2626';if(v<th)return'#f59e0b';return'inherit';};
+    h+='<div class="'+lvCls[a.level]+'" style="display:flex;align-items:center;font-size:10px;border-bottom:1px solid #f1f5f9;min-width:fit-content">';
+    h+='<div style="width:48px;text-align:center;padding:4px 3px;flex-shrink:0"><span class="a-pri '+priCls[a.level]+'">'+icons[a.level]+' '+labels[a.level]+'</span></div>';
+    h+='<div style="width:110px;font-weight:600;padding:4px 3px;flex-shrink:0;font-size:10px">'+esc(a.sku.SKU||'')+'</div>';
+    h+='<div style="width:65px;color:var(--text2);padding:4px 3px;flex-shrink:0">'+esc(a.sku.品名||'')+'</div>';
+    h+='<div style="width:60px;color:var(--text2);padding:4px 3px;flex-shrink:0">'+esc(a.sku.店铺||'')+'</div>';
+    h+='<div style="width:56px;text-align:right;padding:4px 3px;flex-shrink:0;color:'+cDOS(a.dosWIP,30)+'">'+(a.dosWIP||0).toFixed(1)+'</div>';
+    h+='<div style="width:56px;text-align:right;padding:4px 3px;flex-shrink:0;color:'+cDOS(a.dosDomestic,30)+'">'+(a.dosDomestic||0).toFixed(1)+'</div>';
+    h+='<div style="width:52px;text-align:right;padding:4px 3px;flex-shrink:0;color:'+cDOS(a.dosTransit,20)+'">'+(a.dosTransit||0).toFixed(1)+'</div>';
+    h+='<div style="width:56px;text-align:right;padding:4px 3px;flex-shrink:0;color:'+cDOS(a.dosFBA,15)+'">'+(a.dosFBA||0).toFixed(1)+'</div>';
+    h+='<div style="width:56px;text-align:right;padding:4px 3px;flex-shrink:0;color:'+cDOS(a.dosFBM,15)+'">'+(a.dosFBM||0).toFixed(1)+'</div>';
+    h+='<div style="width:50px;text-align:right;padding:4px 3px;flex-shrink:0">'+fmt(a.daily)+'</div>';
+    h+='<div style="width:62px;text-align:right;padding:4px 3px;flex-shrink:0"><span style="font-weight:700;color:#dc2626">'+fmt(a.suggested)+'</span></div>';
+    h+='<div style="flex:1;font-size:9px;color:var(--text2);padding:4px 3px">'+esc(a.reason)+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  h+='</div></div>';
+  return h;
+}
+
+
+var skuSort={col:null,dir:1};
+function initSKUColSort(){
+  setTimeout(function(){
+    var tables=document.querySelectorAll("table");
+    tables.forEach(function(tbl){
+      var ths=tbl.querySelectorAll("th");
+      ths.forEach(function(th){
+        if(th._sortBound)return;
+        th._sortBound=true;
+        th.style.cursor="pointer";
+        th.title="点击排序";
+        th.onclick=function(){
+          var txt=(this.textContent||"").split(chr(10)).join("").trim();
+          if(!txt)return;
+          var fieldMap={"SKU":"SKU","SPU":"spu","预估日销":"预估日销","总库存":"总库存",
+            "国内在制":"国内在制","国内现货":"国内现货","国内总库存":"国内总库存",
+            "FBA在途":"FBA在途数量","FBA在库":"FBA在库数量","fbm可售":"fbm可售",
+            "7天日均":"7天日均销量","14天日均":"14天日均销量","30天日均":"30天日均销量",
+            "海外现货":"海外现货货值","海外在途":"海外在途货值",
+            "国内现货货值":"国内现货货值","国内在制货值":"国内在制货值",
+            "0-30天":"0-30天库龄数量","31-60天":"31-60天库龄数量"};
+          var field=null;
+          for(var k in fieldMap){if(txt.indexOf(k)>=0){field=fieldMap[k];break;}}
+          if(!field){return;}
+          sortSKUByField(field);
+        };
+      });
+    });
+  },100);
+}
+function chr(c){return String.fromCharCode(c);}
+function sortSKUByField(field){
+  if(skuSort.col===field)skuSort.dir=-skuSort.dir;else{skuSort.col=field;skuSort.dir=1;}
+  var lv=currentView.level,dept=currentView.dept,store=currentView.store,spu=currentView.spu;
+  var f=skuData.slice();
+  if(dept)f=f.filter(function(r){return r["部门"]===dept;});
+  if(store)f=f.filter(function(r){return r["店铺"]===store;});
+  if(spu)f=f.filter(function(r){return r["spu"]===spu;});
+  f.sort(function(a,b){var va=a[field]||0,vb=b[field]||0;return (va-vb)*skuSort.dir;});
+  var c=document.getElementById("mainContent");
+  var a=agg(f);
+  c.innerHTML=renderAlerts(getAlerts())+kpis(a)+charts(f)+skuTbl(f);
+  setTimeout(function(){initCharts(f);initSKUColSort();},50);
+  showToast((skuSort.dir>0?"升序":"降序")+" "+field);
+}
+function filterSKUTable(type){
+  var lv=currentView.level,dept=currentView.dept,store=currentView.store,spu=currentView.spu;
+  var f=skuData.slice();
+  if(dept)f=f.filter(function(r){return r["部门"]===dept;});
+  if(store)f=f.filter(function(r){return r["店铺"]===store;});
+  if(spu)f=f.filter(function(r){return r["spu"]===spu;});
+  if(type==="滞销"){f=f.filter(function(r){var d=r["在库+在途DOS_30d"]||r["FBA可售DOS"]||r["国内库存DOS"]||0;return d>90;});}
+  else if(type==="断货"){f=f.filter(function(r){return ((r["FBA在库数量"]||0)+(r["fbm可售"]||0))<=0;});}
+  else if(type==="长库龄"){f=f.filter(function(r){return (r["大于180天库存合计"]||0)>0;});}
+  else if(type==="低DOS"){f=f.filter(function(r){var d=r["FBA可售DOS"]||r["国内库存DOS"]||0;return d>0&&d<7;});}
+  if(f.length===0){showToast("筛选 "+type+": 无匹配SKU");return;}
+  var c=document.getElementById("mainContent");
+  var a=agg(f);
+  c.innerHTML=renderAlerts(getAlerts())+kpis(a)+charts(f)+skuTbl(f);
+  setTimeout(function(){initCharts(f);initSKUColSort();},50);
+  showToast("筛选: "+type+" ("+f.length+"条)");
+}
+
+function renderDept(){
+  var depts=grpBy('部门',skuData);
+  var a=agg(skuData);
+  var c=document.getElementById('mainContent');
+  c.innerHTML=renderAlerts(getAlerts())+kpis(a)+charts(skuData)+aggTbl('部门维度',Object.entries(depts).map(function(e){return {name:e[0],agg:agg(e[1]),data:e[1],type:'dept'};}),'dept');
+  setTimeout(function(){initCharts(skuData);},50);
+}
+function renderStore(dept,filtered){
+  var sts=grpBy('店铺',filtered);
+  var a=agg(filtered);
+  var c=document.getElementById('mainContent');
+  c.innerHTML=renderAlerts(getAlerts())+kpis(a)+charts(filtered)+aggTbl('店铺维度',Object.entries(sts).map(function(e){return {name:e[0],agg:agg(e[1]),data:e[1],type:'store'};}),'store');
+  setTimeout(function(){initCharts(filtered);},50);
+}
+function renderSPU(dept,store,filtered){
+  var sps=grpBy('spu',filtered);
+  var a=agg(filtered);
+  var c=document.getElementById('mainContent');
+  c.innerHTML=renderAlerts(getAlerts())+kpis(a)+charts(filtered)+aggTbl('SPU维度',Object.entries(sps).map(function(e){return {name:e[0],agg:agg(e[1]),data:e[1],type:'spu'};}),'spu');
+  setTimeout(function(){initCharts(filtered);},50);
+}
+function renderSKU(dept,store,spu,filtered){
+  var a=agg(filtered);
+  var c=document.getElementById('mainContent');
+  c.innerHTML=renderAlerts(getAlerts())+kpis(a)+charts(filtered)+skuTbl(filtered);
+  setTimeout(function(){initCharts(filtered);initSKUColSort();},50);
+}
+
+// ============================================================
+// EDIT & RECALC
+// ============================================================
+function onEdit(el){
+  var id=parseInt(el.dataset.id),f=el.dataset.f;
+  var nv=parseFloat(el.textContent)||0;
+  var sku=skuData.find(function(r){return r._id===id;});
+  if(!sku||sku[f]===nv)return;
+  var ov=sku[f];
+  sku[f]=nv;
+  if(f==="预估日销")sku._manualPredict=true;
+  calcDOS(sku);
+  logOp("编辑",sku.SKU+" "+f+": "+fmt(ov)+"→"+fmt(nv));
+  autoSave();
+  refresh();
+  showToast('✅ '+sku.SKU+' · '+f+': '+fmt(ov)+' → '+fmt(nv));
+}
+
+function editModal(id){
+  var sku=skuData.find(function(r){return r._id===id;});if(!sku)return;
+  var secs=[
+    {t:'📦 库存数据',bg:'#f0fdfa',fs:[['国内在制','国内在制'],['国内现货','国内现货'],['FBA在途数量','FBA在途数量'],['FBA在库数量','FBA在库数量'],['fbm可售','fbm可售']]},
+    {t:'💰 日销数据',bg:'#faf5ff',fs:[['预估日销','预估日销'],['7天日均销量','7天日均销量'],['14天日均销量','14天日均销量'],['30天日均销量','30天日均销量']]},
+    {t:'📅 库龄数据',bg:'#fff1f2',fs:[['0-30天库龄数量','0-30天库龄数量'],['31-60天库龄数量','31-60天库龄数量'],['61-90天库龄数量','61-90天库龄数量'],['91-180天库龄数量','91-180天库龄数量'],['181-270天库龄数量','181-270天库龄数量'],['271-330天库龄数量','271-330天库龄数量'],['331-365天库龄数量','331-365天库龄数量'],['大于365天库龄数量','大于365天库龄数量']]},
+  ];
+  var fh='';
+  secs.forEach(function(s){
+    fh+='<div class="sec-tit" style="background:'+s.bg+'">'+s.t+'</div>';
+    s.fs.forEach(function(p){fh+='<div class="f-row"><label>'+p[0]+'</label><input type="number" step="any" data-f="'+p[1]+'" value="'+(sku[p[1]]||0)+'" /></div>';});
+  });
+  fh+='<div class="sec-tit" style="background:#f1f5f9">📊 自动计算（只读）</div>'+
+    '<div class="f-row"><label >总库存</label><input value="'+fmt(sku.总库存||0)+'" readonly style="background:#f8fafc" /></div>'+
+    '<div class="f-row"><label>国内在制DOS</label><input value="'+(sku.国内在制DOS||0).toFixed(1)+'天" readonly style="background:#f8fafc" /></div>'+
+    '<div class="f-row"><label >国内库存DOS</label><input value="'+(sku.国内库存DOS||0).toFixed(1)+'天" readonly style="background:#f8fafc" /></div>'+
+    '<div class="f-row"><label >在途DOS</label><input value="'+(sku.在途DOS||0).toFixed(1)+'天" readonly style="background:#f8fafc" /></div>'+
+    '<div class="f-row"><label >FBA可售DOS</label><input value="'+(sku.FBA可售DOS||0).toFixed(1)+'天" readonly style="background:#f8fafc" /></div>'+
+    '<div class="f-row"><label >FBM可售DOS</label><input value="'+(sku.FBM可售DOS||0).toFixed(1)+'天" readonly style="background:#f8fafc" /></div>';
+  document.getElementById('editModalContent').innerHTML='<h3>✏️ 编辑: '+esc(sku.SKU)+'</h3><div style="font-size:10px;color:var(--text2);margin-bottom:6px">'+esc(sku.品名||'')+' | '+esc(sku.店铺||'')+' | '+esc(sku.部门||'')+'</div>'+fh+'<div class="f-acts"><button class="btn" onclick="clsModal()">取消</button><button class="btn btn-pri" onclick="saveModal('+id+')">💾 保存并联动</button></div>';
+  document.getElementById('editModal').style.display='flex';
+}
+function saveModal(id){
+  var sku=skuData.find(function(r){return r._id===id;});if(!sku)return;
+  var ch=[];
+  document.getElementById('editModalContent').querySelectorAll('input[data-f]').forEach(function(inp){
+    var f=inp.dataset.f,nv=parseFloat(inp.value)||0;
+    if(sku[f]!==nv){ch.push(f);sku[f]=nv;}
+  });
+  if(ch.length){calcDOS(sku);logOp("批量编辑",sku.SKU+" 更新"+ch.length+"字段");autoSave();refresh();showToast('✅ 更新'+ch.length+'个字段，全层级已联动');}
+  clsModal();
+}
+function clsModal(){document.getElementById('editModal').style.display='none';}
+function rstSku(id){
+  var sku=skuData.find(function(r){return r._id===id;});if(!sku||!sku._orig)return;
+  Object.keys(sku._orig).forEach(function(k){if(typeof sku._orig[k]==='number')sku[k]=sku._orig[k];});
+  calcDOS(sku);refresh();showToast('↩️ 已恢复');
+}
+function resetAll(){
+  if(!confirm('确定重置所有SKU到原始数据？所有修改将丢失。'))return;
+  skuData.forEach(function(r){if(r._orig)Object.keys(r._orig).forEach(function(k){if(typeof r._orig[k]==='number')r[k]=r._orig[k];});calcDOS(r);});
+  refresh();showToast('🔄 已全部重置');
+}
+function refresh(){
+  renderView();
+  setTimeout(function(){
+    var lv=currentView.level,dept=currentView.dept,store=currentView.store,spu=currentView.spu;
+    var f=skuData.slice();
+    if(dept)f=f.filter(function(r){return r['部门']===dept;});
+    if(store)f=f.filter(function(r){return r['店铺']===store;});
+    if(spu)f=f.filter(function(r){return r['spu']===spu;});
+    initCharts(f);
+  },50);
+}
+
+// ============================================================
+// EXCEL IMPORT / TEMPLATE DOWNLOAD
+// ============================================================
+var TEMPLATE_COLS=[
+  'SKU','spu','品名','国家','店铺','售价','负责人','部门',
+  '国内在制','国内现货','FBA在途数量','FBA在库数量','fbm可售',
+  '7天日均销量','14天日均销量','30天日均销量','历年同时期日销',
+  '0-30天库龄数量','31-60天库龄数量','61-90天库龄数量','91-180天库龄数量',
+  '181-270天库龄数量','271-330天库龄数量','331-365天库龄数量','大于365天库龄数量'
+];
+
+function downloadTemplate(){
+  // Create workbook with template sheet
+  var ws_data=[TEMPLATE_COLS]; // header row
+  // Add 3 example rows
+  ws_data.push(['EXAMPLE-SKU-001','SPU-A','示例商品1','美国','店铺A','$99.99','张三','部门A',10,20,5,30,2,0.5,0.6,0.7,1.2,1,2,0,0,0,0,0,0]);
+  ws_data.push(['EXAMPLE-SKU-002','SPU-A','示例商品2','美国','店铺A','$149.99','张三','部门A',0,15,10,40,0,0.3,0.5,0.6,2.5,0,0,3,1,0,0,0,0]);
+  ws_data.push(['EXAMPLE-SKU-003','SPU-B','示例商品3','日本','店铺B','¥5000','李四','部门B',5,30,8,20,1,3,0.8,0.9,1.0,0,0,0,0,0,0,0,0]);
+
+  var ws=XLSX.utils.aoa_to_sheet(ws_data);
+  // Set column widths
+  ws['!cols']=TEMPLATE_COLS.map(function(){return {wch:16};});
+
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'库存数据模板');
+  XLSX.writeFile(wb,'库存DOS导入模板.xlsx');
+  showToast('📥 模板已下载，填写后可通过"导入Excel"上传');
+}
+
+function importExcel(input){
+  var file=input.files[0];
+  if(!file)return;
+
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+
+      if(rows.length<2){alert('Excel文件为空或格式不正确！');input.value='';return;}
+
+      // Detect header row (first row)
+      var header=rows[0];
+      // Map column index to field name
+      var colMap={};
+      TEMPLATE_COLS.forEach(function(col){
+        for(var i=0;i<header.length;i++){
+          if(String(header[i]).trim()===col){colMap[col]=i;break;}
+        }
+      });
+
+      // Check required columns
+      var missing=[];
+      ['SKU','spu','店铺','部门'].forEach(function(c){
+        if(!(c in colMap))missing.push(c);
+      });
+      if(missing.length>0){
+        alert('Excel缺少必填列: '+missing.join(', ')+'\n\n请使用"下载模板"获取正确格式。');
+        input.value='';return;
+      }
+
+      // Parse data rows (skip header)
+      var newData=[];
+      for(var r=1;r<rows.length;r++){
+        var row=rows[r];
+        if(!row[colMap['SKU']]&&!row[colMap['spu']])continue; // skip empty rows
+
+        var item={};
+        TEMPLATE_COLS.forEach(function(col){
+          var idx=colMap[col];
+          if(idx!==undefined&&idx<row.length){
+            item[col]=row[idx];
+          }else{
+            item[col]='';
+          }
+        });
+        newData.push(item);
+      }
+
+      if(newData.length===0){alert('未解析到有效数据行！');input.value='';return;}
+
+      if(!confirm('将导入 '+newData.length+' 条SKU数据，替换当前全部 '+skuData.length+' 条数据。\n\n确定继续？')){input.value='';return;}
+
+      // Replace data
+      skuData=newData;
+      skuData.forEach(function(r,i){
+        TEMPLATE_COLS.slice(8).forEach(function(k){r[k]=Number(r[k])||0;});
+        r['历年同时期日销']=Number(r['历年同时期日销'])||r['30天日均销量']||0;
+        calcDOS(r);
+        r._id=i;
+        r._orig=JSON.parse(JSON.stringify(r));
+      });
+
+      rebuildAll();
+      showToast('✅ 成功导入 '+skuData.length+' 条SKU数据！');
+    }catch(err){
+      alert('导入失败: '+err.message+'\n\n请确保使用正确的模板格式。');
+    }
+    input.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+// CRUD — ADD / DELETE SKU / SPU / STORE / DEPT
+// ============================================================
+function openAddSKU(){
+  // Pre-fill context from current view
+  var ctxDept=currentView.dept||'';
+  var ctxStore=currentView.store||'';
+  var ctxSPU=currentView.spu||'';
+  // Get unique departments, stores, SPUs for datalist suggestions
+  var depts=[],stores=[],spus=[];
+  skuData.forEach(function(r){
+    if(depts.indexOf(r['部门'])<0)depts.push(r['部门']);
+    if(stores.indexOf(r['店铺'])<0)stores.push(r['店铺']);
+    if(spus.indexOf(r['spu'])<0)spus.push(r['spu']);
+  });
+  var deptOpts=depts.map(function(d){return '<option value="'+esc(d)+'">';}).join('');
+  var storeOpts=stores.map(function(s){return '<option value="'+esc(s)+'">';}).join('');
+  var spuOpts=spus.map(function(s){return '<option value="'+esc(s)+'">';}).join('');
+
+  var h='<h3>➕ 新增SKU</h3>';
+  h+='<div class="sec-tit" style="background:#f8fafc">🔖 基本信息</div>';
+  h+='<div class="f-row"><label>SKU *</label><input id="newSKU" placeholder="必填，唯一标识" /></div>';
+  h+='<div class="f-row"><label>SPU *</label><input id="newSPU" list="spuList" value="'+esc(ctxSPU)+'" placeholder="必填" /><datalist id="spuList">'+spuOpts+'</datalist></div>';
+  h+='<div class="f-row"><label >品名</label><input id="newName" /></div>';
+  h+='<div class="f-row"><label>国家</label><input id="newCountry" value="美国" /></div>';
+  h+='<div class="f-row"><label>店铺 *</label><input id="newStore" list="storeList" value="'+esc(ctxStore)+'" placeholder="必填" /><datalist id="storeList">'+storeOpts+'</datalist></div>';
+  h+='<div class="f-row"><label>售价</label><input id="newPrice" value="$0" /></div>';
+  h+='<div class="f-row"><label>负责人</label><input id="newPerson" /></div>';
+  h+='<div class="f-row"><label>部门 *</label><input id="newDept" list="deptList" value="'+esc(ctxDept)+'" placeholder="必填" /><datalist id="deptList">'+deptOpts+'</datalist></div>';
+  h+='<div class="sec-tit" style="background:#f0fdfa">📦 库存数据</div>';
+  h+='<div class="f-row"><label>国内在制</label><input id="new_domestic_wip" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>国内现货</label><input id="new_domestic_spot" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>FBA在途数量</label><input id="new_fba_transit" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>FBA在库数量</label><input id="new_fba_stock" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>fbm可售</label><input id="new_fbm" type="number" step="any" value="0" /></div>';
+  h+='<div class="sec-tit" style="background:#faf5ff">💰 日销数据</div>';
+  h+='<div class="f-row"><label >预估日销</label><input id="new_est_sales" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>7天日均销量</label><input id="new_avg7" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>14天日均销量</label><input id="new_avg14" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>30天日均销量</label><input id="new_avg30" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>历年同时期日销</label><input id="new_hist" type="number" step="any" value="0" /></div>';
+  h+='<div class="sec-tit" style="background:#fff1f2">📅 库龄数据</div>';
+  h+='<div class="f-row"><label>0-30天</label><input id="new_age0" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>31-60天</label><input id="new_age1" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>61-90天</label><input id="new_age2" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>91-180天</label><input id="new_age3" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>181-270天</label><input id="new_age4" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>271-330天</label><input id="new_age5" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>331-365天</label><input id="new_age6" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-row"><label>&gt;365天</label><input id="new_age7" type="number" step="any" value="0" /></div>';
+  h+='<div class="f-acts"><button class="btn" onclick="clsModal()">取消</button><button class="btn btn-pri" onclick="saveNewSKU()">💾 保存并联动</button></div>';
+  document.getElementById('editModalContent').innerHTML=h;
+  document.getElementById('editModal').style.display='flex';
+}
+
+function saveNewSKU(){
+  var skuCode=document.getElementById('newSKU').value.trim();
+  var spu=document.getElementById('newSPU').value.trim();
+  var store=document.getElementById('newStore').value.trim();
+  var dept=document.getElementById('newDept').value.trim();
+  if(!skuCode||!spu||!store||!dept){alert('SKU、SPU、店铺、部门为必填项！');return;}
+
+  var r={
+    SKU:skuCode, spu:spu, 品名:document.getElementById('newName').value.trim(),
+    国家:document.getElementById('newCountry').value.trim(), 店铺:store,
+    售价:document.getElementById('newPrice').value.trim(), 负责人:document.getElementById('newPerson').value.trim(),
+    部门:dept,
+    国内在制:Number(document.getElementById('new_domestic_wip').value)||0,
+    国内现货:Number(document.getElementById('new_domestic_spot').value)||0,
+    FBA在途数量:Number(document.getElementById('new_fba_transit').value)||0,
+    FBA在库数量:Number(document.getElementById('new_fba_stock').value)||0,
+    fbm可售:Number(document.getElementById('new_fbm').value)||0,
+    预估日销:Number(document.getElementById('new_est_sales').value)||0,
+    '7天日均销量':Number(document.getElementById('new_avg7').value)||0,
+    '14天日均销量':Number(document.getElementById('new_avg14').value)||0,
+    '30天日均销量':Number(document.getElementById('new_avg30').value)||0,
+    '历年同时期日销':Number(document.getElementById('new_hist').value)||0,
+    '0-30天库龄数量':Number(document.getElementById('new_age0').value)||0,
+    '31-60天库龄数量':Number(document.getElementById('new_age1').value)||0,
+    '61-90天库龄数量':Number(document.getElementById('new_age2').value)||0,
+    '91-180天库龄数量':Number(document.getElementById('new_age3').value)||0,
+    '181-270天库龄数量':Number(document.getElementById('new_age4').value)||0,
+    '271-330天库龄数量':Number(document.getElementById('new_age5').value)||0,
+    '331-365天库龄数量':Number(document.getElementById('new_age6').value)||0,
+    '大于365天库龄数量':Number(document.getElementById('new_age7').value)||0,
+  };
+  r._id=skuData.length; calcDOS(r); r._orig=JSON.parse(JSON.stringify(r));
+  skuData.push(r);
+  logOp('新增',r.SKU+' '+r.spu+' '+r.店铺);
+  autoSave();
+  clsModal();
+  rebuildAll();
+  showToast('✅ 已新增 SKU: '+r.SKU);
+}
+
+function deleteSKU(id){
+  var sku=skuData.find(function(r){return r._id===id;});
+  if(!sku)return;
+  if(!confirm('确定删除 SKU「'+sku.SKU+'」('+sku.品名+')？\n\n此操作不可恢复。'))return;
+  skuData=skuData.filter(function(r){return r._id!==id;});
+  logOp('删除SKU',sku.SKU+' '+sku.品名);
+  autoSave();
+  rebuildAll();
+  showToast('🗑️ 已删除 SKU: '+sku.SKU);
+}
+
+function deleteSPU(dept,store,spu){
+  var targets=skuData.filter(function(r){return r['部门']===dept&&r['店铺']===store&&r['spu']===spu;});
+  if(!targets.length)return;
+  if(!confirm('确定删除 SPU「'+spu+'」？\n\n将删除该SPU下全部 '+targets.length+' 个SKU，此操作不可恢复。'))return;
+  logOp("删除SPU",dept+" / "+store+" / "+spu+" ("+targets.length+"条)");
+  skuData=skuData.filter(function(r){return !(r['部门']===dept&&r['店铺']===store&&r['spu']===spu);});
+  autoSave();rebuildAll();
+  showToast('已删除 SPU: '+spu+' ('+targets.length+'个SKU)');
+}
+function deleteStore(dept,store){
+  var targets=skuData.filter(function(r){return r['部门']===dept&&r['店铺']===store;});
+  if(!targets.length)return;
+  if(!confirm('确定删除店铺「'+store+'」？\n\n将删除该店铺下全部 '+targets.length+' 个SKU，此操作不可恢复。'))return;
+  logOp("删除店铺",dept+" / "+store+" ("+targets.length+"条)");
+  skuData=skuData.filter(function(r){return !(r['部门']===dept&&r['店铺']===store);});
+  autoSave();rebuildAll();
+  showToast('已删除店铺: '+store+' ('+targets.length+'个SKU)');
+}
+
+function renameEntity(type,oldName,dept,store){
+  var labels={dept:"部门",store:"店铺",spu:"SPU"};
+  var newName=prompt("修改"+labels[type]+"名称:",oldName);
+  if(!newName||newName===oldName)return;
+  var field=type==="dept"?"部门":type==="store"?"店铺":"spu";
+  var count=0;
+  skuData.forEach(function(r){
+    if(type==="dept"&&r["部门"]===oldName){r["部门"]=newName;count++;}
+    else if(type==="store"&&r["部门"]===dept&&r["店铺"]===oldName){r["店铺"]=newName;count++;}
+    else if(type==="spu"&&r["部门"]===dept&&r["店铺"]===store&&r["spu"]===oldName){r["spu"]=newName;count++;}
+  });
+  if(count>0){
+    logOp("重命名"+labels[type],oldName+" -> "+newName+" ("+count+"条SKU)");
+    autoSave();
+    rebuildAll();
+    showToast("已更新 "+count+" 条SKU: "+oldName+" -> "+newName);
+  }
+}
+
+function deleteDept(dept){
+  var targets=skuData.filter(function(r){return r['部门']===dept;});
+  if(!targets.length)return;
+  if(!confirm('确定删除部门「'+dept+'」？\n\n将删除该部门下全部 '+targets.length+' 个SKU，此操作不可恢复。'))return;
+  logOp("删除部门",dept+" ("+targets.length+"条)");
+  skuData=skuData.filter(function(r){return r['部门']!==dept;});
+  autoSave();rebuildAll();
+  showToast('已删除部门: '+dept+' ('+targets.length+'个SKU)');
+}
+
+function rebuildAll(){
+  // Re-assign IDs
+  skuData.forEach(function(r,i){r._id=i;});
+  // Rebuild nav tree
+  initNav();
+  // Reset current view to top level if current selection no longer exists
+  var depts=grpBy('部门',skuData);
+  if(currentView.dept&&!depts[currentView.dept]){currentView={level:'dept',dept:null,store:null,spu:null};}
+  else if(currentView.store){
+    var stores=grpBy('店铺',skuData.filter(function(r){return r['部门']===currentView.dept;}));
+    if(!stores[currentView.store]){currentView={level:'dept',dept:currentView.dept,store:null,spu:null};}
+    else if(currentView.spu){
+      var spus=grpBy('spu',skuData.filter(function(r){return r['部门']===currentView.dept&&r['店铺']===currentView.store;}));
+      if(!spus[currentView.spu]){currentView={level:'store',dept:currentView.dept,store:currentView.store,spu:null};}
+    }
+  }
+  refresh();
+  // Re-select active nav item
+  setTimeout(function(){
+    var sel='.nav-item[data-level="'+currentView.level+'"]';
+    if(currentView.dept)sel+='[data-dept="'+esc(currentView.dept)+'"]';
+    if(currentView.store)sel+='[data-store="'+esc(currentView.store)+'"]';
+    if(currentView.spu)sel+='[data-spu="'+esc(currentView.spu)+'"]';
+    var el=document.querySelector(sel);
+    if(el){
+      document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
+      el.classList.add('active');
+      // Expand parents
+      var p=el.parentElement;
+      while(p&&p.classList.contains('nav-children')){
+        var item=p.parentElement;
+        if(item&&item.classList.contains('nav-item'))item.classList.add('expanded');
+        p=item?item.parentElement:null;
+      }
+    }
+  },100);
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+
+
+
+function exportExcel(){
+  var lv=currentView.level,dept=currentView.dept,store=currentView.store,spu=currentView.spu;
+  var f=skuData.slice();
+  if(dept)f=f.filter(function(r){return r["部门"]===dept;});
+  if(store)f=f.filter(function(r){return r["店铺"]===store;});
+  if(spu)f=f.filter(function(r){return r["spu"]===spu;});
+  var cols=["SKU","spu","品名","国家","店铺","售价","负责人","部门",
+    "国内在制DOS","国内库存DOS","在途DOS","FBA可售DOS","FBM可售DOS",
+    "国内在制健康度_","国内现货健康度_","在途健康度_","可售健康度_",
+    "预估日销","7天日均销量","14天日均销量","30天日均销量","历年同时期日销",
+    "国内在制","国内现货","国内总库存","FBA在途数量","FBA在库数量","fbm可售","总库存",
+    "海外现货货值","海外在途货值","国内现货货值","国内在制货值",
+    "0-30天库龄数量","31-60天库龄数量","61-90天库龄数量","91-180天库龄数量",
+    "181-270天库龄数量","271-330天库龄数量","331-365天库龄数量","大于365天库龄数量","大于180天库存合计"];
+  var data=[cols];
+  f.forEach(function(r){
+    var row=cols.map(function(c){
+      if(c.endsWith("_")){var v=r[c.slice(0,-1)];return v&&v.lb?v.lb:"";}
+      var v=r[c];if(v===null||v===undefined)return"";return v;
+    });
+    data.push(row);
+  });
+  var ws=XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"]=cols.map(function(){return {wch:14};});
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"库存DOS数据");
+  XLSX.writeFile(wb,"库存DOS健康度_"+new Date().toISOString().slice(0,10)+".xlsx");
+  showToast("Excel已导出 (含格式)");
+}
+
+function exportData(){
+  var lv=currentView.level,dept=currentView.dept,store=currentView.store,spu=currentView.spu;
+  var f=skuData.slice();
+  if(dept)f=f.filter(function(r){return r['部门']===dept;});
+  if(store)f=f.filter(function(r){return r['店铺']===store;});
+  if(spu)f=f.filter(function(r){return r['spu']===spu;});
+
+  var cols=['SKU','spu','品名','国家','店铺','部门',
+    '国内在制DOS','国内库存DOS','在途DOS','FBA可售DOS','FBM可售DOS',
+    '国内在制健康度','国内现货健康度','在途健康度','可售健康度',
+    '预估日销','7天日均销量','14天日均销量','30天日均销量',
+    '国内在制','国内现货','国内总库存','FBA在途数量','FBA在库数量','fbm可售','总库存',
+    '海外现货货值','海外在途货值','国内现货货值','国内在制货值',
+    '0-30天库龄数量','31-60天库龄数量','61-90天库龄数量','91-180天库龄数量',
+    '181-270天库龄数量','271-330天库龄数量','331-365天库龄数量','大于365天库龄数量','大于180天库存合计','历年同时期日销'];
+  var csv=cols.join(',')+'\n';
+  f.forEach(function(r){
+    csv+=cols.map(function(c){
+      var v=r[c];
+      if(v===null||v===undefined)return'';
+      if(typeof v==='object'&&v.lb)return v.lb; // health object
+      if(typeof v==='string'&&v.indexOf(',')>=0)return'"'+v+'"';
+      return v;
+    }).join(',')+'\n';
+  });
+  var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='库存DOS健康度_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  URL.revokeObjectURL(a.href);showToast('📥 导出成功');
+}
+
+// ============================================================
+// SEARCH
+// ============================================================
+document.addEventListener('DOMContentLoaded',function(){
+  loadData();
+  document.getElementById('searchInput').addEventListener('input',function(e){
+    var q=e.target.value.toLowerCase().trim();
+    if(!q){refresh();return;}
+    var rs=skuData.filter(function(r){return (r.SKU||'').toLowerCase().indexOf(q)>=0||(r.spu||'').toLowerCase().indexOf(q)>=0||(r.品名||'').toLowerCase().indexOf(q)>=0||(r.店铺||'').toLowerCase().indexOf(q)>=0||(r.部门||'').toLowerCase().indexOf(q)>=0;});
+    var c=document.getElementById('mainContent');
+    if(!rs.length){c.innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)">🔍 未找到 "'+esc(q)+'"</div>';return;}
+    c.innerHTML=renderAlerts(getAlerts())+kpis(agg(rs))+skuTbl(rs);
+    setTimeout(function(){initCharts(rs);initSKUColSort();},50);
+  });
+  document.getElementById('editModal').addEventListener('click',function(e){if(e.target===this)clsModal();});
+});
+
+// ============================================================
+// UTILS
+// ============================================================
+function fmt(n){if(n===null||n===undefined||isNaN(n))return'0';return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:1});}
+function fmtM(n){if(n===null||n===undefined||isNaN(n))return'$0';return'$'+Number(n).toLocaleString('zh-CN',{maximumFractionDigits:0});}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.className='toast ok';t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2500);}
+</script>
+
+<div id="logPanel" style="position:fixed;bottom:0;left:250px;right:0;background:#1e293b;color:#e2e8f0;z-index:20;font-size:10px;display:none;max-height:180px;overflow-y:auto">
+  <div style="display:flex;align-items:center;padding:5px 14px;background:#0f172a;position:sticky;top:0;z-index:2">
+    <span style="font-weight:700">操作日志</span>
+    <span style="margin-left:8px;color:#94a3b8;font-size:9px" id="logCount">0条</span>
+    <button class="btn btn-xs" onclick="document.getElementById('logList').innerHTML='';opLog=[];saveLog();document.getElementById('logCount').textContent='0条'" style="margin-left:auto;color:#94a3b8;border-color:#475569">清空</button>
+    <button class="btn btn-xs" onclick="document.getElementById('logPanel').style.display='none'" style="color:#94a3b8;border-color:#475569;margin-left:4px">X</button>
+  </div>
+  <div id="logList" style="padding:4px 14px"></div>
+</div>
+<button id="logToggle" onclick="toggleLog()" style="position:fixed;bottom:6px;right:20px;z-index:21;background:#1e293b;color:#e2e8f0;border:none;padding:5px 10px;border-radius:6px;font-size:10px;cursor:pointer" title="操作日志">日志</button>
+
+</body>
+</html>
