@@ -1576,7 +1576,6 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
       h+='<div style="width:52px;text-align:right;padding:4px 3px;flex-shrink:0;color:'+cDOS(a.dosFBM,15)+'">'+(a.dosFBM||0).toFixed(1)+'</div>';
       h+='<div style="width:48px;text-align:right;padding:4px 3px;flex-shrink:0">'+fmt(a.daily)+'</div>';
       h+='<div style="width:56px;text-align:right;padding:4px 3px;flex-shrink:0"><span style="font-weight:700;color:#dc2626">'+fmt(a.suggested)+'</span></div>';
-      h+='<span onclick="event.stopPropagation();markAlertProcessed('+a.sku._id+',\'stockout\')" title="'+(isDone?'已处理，点击撤销':'标记已处理')+'" style="cursor:pointer;font-size:14px;flex-shrink:0;margin-right:4px;user-select:none;'+(isDone?'color:#10b981':'color:#94a3b8')+'">'+(isDone?'☑':'☐')+'</span>';
       h+='<div style="flex:1;font-size:9px;color:var(--text2);padding:4px 3px">'+esc(a.reason)+'</div>';
       h+='</div>';
     });
@@ -1604,6 +1603,7 @@ function renderOverPanel(overAlerts,showProcessed){
   if(window._overOpen===undefined)window._overOpen=true;
   h+='<div class="alert-list'+(window._overOpen?' open':'')+'" style="max-height:380px;overflow:auto;max-width:100%">';
   var colWidths=[
+    {w:'28px',a:'center',l:''},
     {w:'48px',a:'center',l:'优先级'},{w:'110px',a:'left',l:'SKU'},{w:'65px',a:'left',l:'品名'},{w:'60px',a:'left',l:'店铺'},
     {w:'52px',a:'right',l:'国内<br>在制DOS'},{w:'52px',a:'right',l:'国内<br>库存DOS'},{w:'48px',a:'right',l:'在途<br>DOS'},
     {w:'52px',a:'right',l:'FBA<br>可售DOS'},{w:'52px',a:'right',l:'FBM<br>可售DOS'},
@@ -1622,6 +1622,12 @@ function renderOverPanel(overAlerts,showProcessed){
       var isDone=isAlertProcessed(a.sku._id,a.type);
       var hdrCls=overCls[a.level];
       h+='<div class="'+hdrCls+'" style="display:flex;align-items:center;font-size:10px;border-bottom:1px solid #f1f5f9;min-width:fit-content'+(isDone?';opacity:0.5':'')+'">';
+      // 左边勾选框 — 勾选=标记已处理
+      if(!showProcessed){
+        h+='<div style="width:28px;text-align:center;padding:4px 0;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();markAlertProcessed('+a.sku._id+',\'overstock\')"><span style="font-size:14px;color:'+(isDone?'#10b981':'#d1d5db')+'">'+(isDone?'☑':'☐')+'</span></div>';
+      }else{
+        h+='<div style="width:28px;flex-shrink:0"></div>';
+      }
       h+='<div style="width:48px;text-align:center;padding:4px 3px;flex-shrink:0"><span class="a-pri '+priCls[a.level]+'">🟡 滞销</span></div>';
       h+='<div style="width:110px;font-weight:600;padding:4px 3px;flex-shrink:0;font-size:10px">'+esc(a.sku.SKU||'')+'</div>';
       h+='<div style="width:65px;color:var(--text2);padding:4px 3px;flex-shrink:0">'+esc(a.sku.品名||'')+'</div>';
@@ -1634,7 +1640,6 @@ function renderOverPanel(overAlerts,showProcessed){
       h+='<div style="width:48px;text-align:right;padding:4px 3px;font-weight:600;color:'+(a.totalDOS>90?'#e11d48':'#f59e0b')+'">'+(a.totalDOS||0).toFixed(1)+'天</div>';
       h+='<div style="width:52px;text-align:right;padding:4px 3px">'+fmt(a.totalInv||0)+'</div>';
       h+='<div style="width:52px;text-align:right;padding:4px 3px;font-weight:600;color:'+(a.agingRatio>20?'#e11d48':'#f59e0b')+'">'+(a.agingRatio||0).toFixed(0)+'%</div>';
-      h+='<span onclick="event.stopPropagation();markAlertProcessed('+a.sku._id+',\'overstock\')" title="'+(isDone?'已处理，点击撤销':'标记已处理')+'" style="cursor:pointer;font-size:14px;flex-shrink:0;margin-right:4px;user-select:none;'+(isDone?'color:#10b981':'color:#94a3b8')+'">'+(isDone?'☑':'☐')+'</span>';
       h+='<div style="flex:1;font-size:9px;color:var(--text2);padding:4px 3px">'+esc(a.reason)+'</div>';
       h+='</div>';
     });
