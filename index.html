@@ -595,7 +595,7 @@ function updateFilterBar(){
 
 async function loadData(){
   try{
-    var restored=loadSavedData();
+    var restored=await loadSavedData();
     if(restored){console.log("Loaded saved data:",skuData.length,"SKUs");}
     else if(window.__TEST_SKU_DATA__){skuData=window.__TEST_SKU_DATA__;}
     else{skuData=[];}
@@ -1284,11 +1284,13 @@ function autoSave(){
     }catch(e){}
   },500);
 }
-async function loadSavedData(){
+function loadSavedData(){
+  // initSync已把服务端数据同步到localStorage，这里直接读即可
   try{
-    var d=await syncLoad("skuData");
+    var raw=localStorage.getItem("skuData");
+    if(!raw)return false;
+    var d=JSON.parse(raw);
     if(!d||!d.length)return false;
-    if(!d.length)return false;
     skuData=d;
     skuData.forEach(function(r,i){
       ["预估日销","7天日均销量","14天日均销量","30天日均销量","国内在制","国内现货","国内总库存","FBA在途数量","FBA在库数量","fbm可售","总库存","海外现货货值","海外在途货值","国内现货货值","国内在制货值","0-30天库龄数量","31-60天库龄数量","61-90天库龄数量","91-180天库龄数量","181-270天库龄数量","271-330天库龄数量","331-365天库龄数量","大于365天库龄数量","大于180天库存合计","历年同时期日销"].forEach(function(k){r[k]=Number(r[k])||0;});
@@ -2385,6 +2387,7 @@ function importExcel(input){
         r._orig=JSON.parse(JSON.stringify(r));
       });
 
+      saveData();
       rebuildAll();
       showToast('✅ 成功导入 '+(choice?'':'新增')+newData.length+' 条，当前共 '+skuData.length+' 条SKU！');
     }catch(err){
@@ -2518,7 +2521,7 @@ function deleteSPU(dept,store,spu){
   if(!confirm('确定删除 SPU「'+spu+'」？\n\n将删除该SPU下全部 '+targets.length+' 个SKU，此操作不可恢复。'))return;
   logOp("删除SPU",dept+" / "+store+" / "+spu+" ("+targets.length+"条)");
   skuData=skuData.filter(function(r){return !(r['部门']===dept&&r['店铺']===store&&r['spu']===spu);});
-  autoSave();rebuildAll();
+  saveData();rebuildAll();
   showToast('已删除 SPU: '+spu+' ('+targets.length+'个SKU)');
 }
 function deleteStore(dept,store){
@@ -2527,7 +2530,7 @@ function deleteStore(dept,store){
   if(!confirm('确定删除店铺「'+store+'」？\n\n将删除该店铺下全部 '+targets.length+' 个SKU，此操作不可恢复。'))return;
   logOp("删除店铺",dept+" / "+store+" ("+targets.length+"条)");
   skuData=skuData.filter(function(r){return !(r['部门']===dept&&r['店铺']===store);});
-  autoSave();rebuildAll();
+  saveData();rebuildAll();
   showToast('已删除店铺: '+store+' ('+targets.length+'个SKU)');
 }
 
@@ -2556,7 +2559,7 @@ function deleteDept(dept){
   if(!confirm('确定删除部门「'+dept+'」？\n\n将删除该部门下全部 '+targets.length+' 个SKU，此操作不可恢复。'))return;
   logOp("删除部门",dept+" ("+targets.length+"条)");
   skuData=skuData.filter(function(r){return r['部门']!==dept;});
-  autoSave();rebuildAll();
+  saveData();rebuildAll();
   showToast('已删除部门: '+dept+' ('+targets.length+'个SKU)');
 }
 
