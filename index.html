@@ -1507,7 +1507,9 @@ function renderAlerts(alerts){
   // 拆分成断货和滞销两组
   var stockAlerts=allFiltered.filter(function(a){return a.type==='stockout';});
   var overAlerts=allFiltered.filter(function(a){return a.type==='overstock';});
-  return renderStockPanel(stockAlerts,showProcessed,processedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed);
+  var totalOver=alerts.filter(function(a){return a.type==='overstock';});
+  var overProcessedCount=totalOver.filter(function(a){return isAlertProcessed(a.sku._id,a.type);}).length;
+  return renderStockPanel(stockAlerts,showProcessed,processedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed,overProcessedCount,totalOver.length);
 }
 
 function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
@@ -1534,6 +1536,9 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
   if(!showProcessed&&stockAlerts.length>0){
     h+=' <button class="btn btn-xs btn-pri" onclick="event.stopPropagation();generateROFromAlerts()" style="margin-left:6px;font-size:10px">📋 生成补货单('+checkedStockout+')</button>';
     h+=' <span style="font-size:9px;color:var(--text2);margin-left:4px;cursor:pointer" onclick="event.stopPropagation();toggleAllStockoutChecks()">'+(checkedStockout===stockAlerts.length?'取消全选':'全选断货')+'</span>';
+  }
+  if(showProcessed){
+    h+=' <button class="btn btn-xs btn-pri" onclick="event.stopPropagation();switchProcessedView(false)" style="margin-left:6px;font-size:10px">↩ 返回预警清单</button>';
   }
   h+='</div><div class="a-counts">';
   ['urgent','high','medium','low'].forEach(function(lv){if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+counts[lv]+' '+labels[lv]+'</span>';});
@@ -1586,7 +1591,7 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
   return h;
 }
 
-function renderOverPanel(overAlerts,showProcessed){
+function renderOverPanel(overAlerts,showProcessed,processedCount,totalAlerts){
   if(!overAlerts.length&&!showProcessed)return''; // 没有滞销预警时不显示
   var counts={urgent:0,high:0,medium:0,low:0};
   overAlerts.forEach(function(a){counts[a.level]++;});
@@ -1596,9 +1601,13 @@ function renderOverPanel(overAlerts,showProcessed){
 
   var h='<div class="alert-panel" style="margin-bottom:8px">';
   h+='<div class="alert-summary" style="border-left-color:#eab308;background:linear-gradient(135deg,#fefce8,#fff);cursor:pointer" onclick="var lst=this.nextElementSibling;lst.classList.toggle(\'open\');this.querySelector(\'.a-arrow\').textContent=lst.classList.contains(\'open\')?\'▼\':\'▶\';window._overOpen=lst.classList.contains(\'open\')">';
-  h+='<div class="a-title">🟡 滞销预警 <span style="font-weight:400;font-size:10px;color:var(--text2)">库存积压 / 长库龄风险</span></div>';
-  h+='<div class="a-counts">';
+  h+='<div class="a-title">🟡 滞销预警 <span style="font-weight:400;font-size:10px;color:var(--text2)">库存积压 / 长库龄风险</span>';
+  if(showProcessed){
+    h+=' <button class="btn btn-xs btn-pri" onclick="event.stopPropagation();switchProcessedView(false)" style="margin-left:6px;font-size:10px">↩ 返回预警清单</button>';
+  }
+  h+='</div><div class="a-counts">';
   ['urgent','high','medium','low'].forEach(function(lv){if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+counts[lv]+' '+labels[lv]+'</span>';});
+  if(!showProcessed&&processedCount>0)h+='<button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)" style="margin-left:6px;font-size:9px">📋 '+processedCount+'条已处理</button>';
   h+='<span class="a-arrow" style="color:var(--text2);margin-left:6px">▶</span>';
   h+='</div></div>';
 
