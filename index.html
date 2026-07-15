@@ -2313,7 +2313,7 @@ function importExcel(input){
   }
 
   var reader=new FileReader();
-  reader.onload=function(e){
+  reader.onload=async function(e){
     try{
       var wb=XLSX.read(e.target.result,{type:'array'});
       var ws=wb.Sheets[wb.SheetNames[0]];
@@ -2370,8 +2370,12 @@ function importExcel(input){
       var checkData=isAdmin0?skuData:skuData.filter(function(r){return r['部门']===authDept0;});
       checkData.forEach(function(r){existingSKUs[r.SKU]=r;});
       newData.forEach(function(r){if(existingSKUs[r.SKU])dupSKUs++;else newSKUs++;});
-      var replaceLabel=isAdmin0?'全部替换当前数据':'替换【'+authDept0+'】的旧数据（其他部门不受影响）';
-      var choice=confirm('📥 导入预览\n\n共 '+newData.length+' 条数据\n  🆕 新增: '+newSKUs+' 条\n  🔄 重复SKU: '+dupSKUs+' 条\n  📦 当前已有: '+skuData.length+' 条\n  👤 当前身份: '+(isAdmin0?'管理员':authDept0)+'\n\n点「确定」= '+replaceLabel+'\n点「取消」= 跳过重复SKU，仅导入新数据');
+      var replaceLabel=isAdmin0?'全部替换':'替换【'+authDept0+'】的旧数据（其他部门不受影响）';
+      var choice=await customConfirm(
+        '📥 导入预览\n\n共 '+newData.length+' 条数据\n  🆕 新增: '+newSKUs+' 条\n  🔄 重复SKU: '+dupSKUs+' 条\n  📦 当前已有: '+skuData.length+' 条\n  👤 当前身份: '+(isAdmin0?'管理员':authDept0),
+        replaceLabel,
+        '仅导入新数据'
+      );
       if(!choice){
         // Skip duplicates
         var filteredNew=[];
@@ -2404,7 +2408,7 @@ function importExcel(input){
 
       saveData();
       rebuildAll();
-      showToast('✅ 成功导入 '+(choice?'':'新增')+newData.length+' 条，当前共 '+skuData.length+' 条SKU！');
+      showToast('✅ 成功导入 '+newData.length+' 条，当前共 '+skuData.length+' 条SKU！');
     }catch(err){
       var detail='';
       if(err.message.indexOf('XLSX')>=0||err.message.indexOf('undefined')>=0){
@@ -2714,6 +2718,23 @@ document.addEventListener('DOMContentLoaded',async function(){
 // ============================================================
 // UTILS
 // ============================================================
+// 自定义确认框：支持自定义按钮文字，替代原生 confirm
+function customConfirm(msg,btnOk,btnCancel){
+  return new Promise(function(resolve){
+    var ov=document.createElement('div');ov.className='modal-overlay';ov.id='customConfirmOverlay';
+    ov.style.cssText='display:flex;z-index:60';
+    ov.innerHTML='<div class="modal" style="width:420px;text-align:center;padding:24px">'+
+      '<div style="font-size:13px;white-space:pre-line;margin-bottom:18px;line-height:1.6">'+msg+'</div>'+
+      '<div class="f-acts" style="justify-content:center;gap:10px">'+
+      '<button class="btn" id="customConfirmCancel" style="padding:8px 24px;font-size:12px;border-radius:6px">'+esc(btnCancel||'取消')+'</button>'+
+      '<button class="btn btn-pri" id="customConfirmOk" style="padding:8px 24px;font-size:12px;border-radius:6px">'+esc(btnOk||'确定')+'</button>'+
+      '</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('customConfirmOk').onclick=function(){ov.remove();resolve(true);};
+    document.getElementById('customConfirmCancel').onclick=function(){ov.remove();resolve(false);};
+    ov.addEventListener('click',function(e){if(e.target===ov){ov.remove();resolve(false);}});
+  });
+}
 function fmt(n){if(n===null||n===undefined||isNaN(n))return'0';return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:1});}
 function fmtM(n){if(n===null||n===undefined||isNaN(n))return'$0';return'$'+Number(n).toLocaleString('zh-CN',{maximumFractionDigits:0});}
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
