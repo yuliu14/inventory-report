@@ -2381,7 +2381,7 @@ function importExcel(input){
       newData.forEach(function(r){if(existingSKUs[importKey(r)])dupSKUs++;else newSKUs++;});
       var replaceLabel=isAdmin0?'全部替换':'全部替换【'+authDept0+'】';
       var currentCount=isAdmin0?skuData.length:checkData.length;
-      var dupHint=excelDupCount>0?'  ⚠️ Excel内有 '+excelDupCount+' 行SKU+店铺+部门重复，请检查\n':'';
+      var dupHint=excelDupCount>0?'  <span style="color:#e11d48">⚠️ Excel内有 '+excelDupCount+' 行SKU+店铺+部门重复，请检查</span>\n':'';
       var choice=await customConfirm(
         '📥 导入预览\n\n'+
         '共 '+newData.length+' 条数据\n'+
