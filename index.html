@@ -2364,12 +2364,15 @@ function importExcel(input){
       // 判断当前用户身份：部门用户只检查自己部门的SKU去重，管理员全局检查
       var auth0=getAuth();var isAdmin0=auth0&&auth0.isAdmin;var authDept0=auth0&&!isAdmin0?auth0.dept:null;
 
+      // 用 SKU+店铺+部门 作为唯一键来判断新旧
+      function importKey(r){return (r.SKU||'')+'|'+(r.店铺||'')+'|'+(r.部门||'');}
+
       // Duplicate detection + preview
       var newSKUs=0,dupSKUs=0;
       var existingSKUs={};
       var checkData=isAdmin0?skuData:skuData.filter(function(r){return r['部门']===authDept0;});
-      checkData.forEach(function(r){existingSKUs[r.SKU]=r;});
-      newData.forEach(function(r){if(existingSKUs[r.SKU])dupSKUs++;else newSKUs++;});
+      checkData.forEach(function(r){existingSKUs[importKey(r)]=r;});
+      newData.forEach(function(r){if(existingSKUs[importKey(r)])dupSKUs++;else newSKUs++;});
       var replaceLabel=isAdmin0?'覆盖更新全部SKU':'覆盖更新【'+authDept0+'】全部SKU';
       var currentCount=isAdmin0?skuData.length:checkData.length;
       var choice=await customConfirm(
@@ -2387,7 +2390,7 @@ function importExcel(input){
       if(!choice){
         // Skip duplicates
         var filteredNew=[];
-        newData.forEach(function(r){if(!existingSKUs[r.SKU])filteredNew.push(r);});
+        newData.forEach(function(r){if(!existingSKUs[importKey(r)])filteredNew.push(r);});
         if(filteredNew.length===0){alert('所有SKU均为重复，未导入任何数据。');input.value='';return;}
         newData=filteredNew;
       }
