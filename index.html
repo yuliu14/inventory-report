@@ -2375,15 +2375,14 @@ function importExcel(input){
       newData.forEach(function(r){if(existingSKUs[importKey(r)])dupSKUs++;else newSKUs++;});
       var replaceLabel=isAdmin0?'全部替换':'全部替换【'+authDept0+'】';
       var currentCount=isAdmin0?skuData.length:checkData.length;
-      var scopeHint=isAdmin0?'按 SKU+店铺+部门 匹配':'按 SKU+店铺 匹配（限定部门：'+esc(authDept0)+'）';
       var choice=await customConfirm(
         '📥 导入预览\n\n'+
         '共 '+newData.length+' 条数据\n'+
-        '  🆕 新增: '+newSKUs+' 条（系统中无同SKU+店铺+部门组合）\n'+
-        '  🔄 已有: '+dupSKUs+' 条（系统中已存在相同组合）\n'+
-        '  📦 当前'+(isAdmin0?'':'部门')+'已有: '+currentCount+' 条\n'+
+        (isAdmin0?'':'  📍 当前维度：'+esc(authDept0)+' › SKU+店铺\n')+
+        '  🆕 新增SKU: '+newSKUs+' 条\n'+
+        '  🔄 已有SKU: '+dupSKUs+' 条\n'+
+        '  📦 当前已有: '+currentCount+' 条\n'+
         '  👤 当前身份: '+(isAdmin0?'管理员':authDept0)+'\n'+
-        '  🔑 '+scopeHint+'\n'+
         '\n'+
         '💡 对已有的 '+dupSKUs+' 条数据，请选择处理方式：',
         replaceLabel,
