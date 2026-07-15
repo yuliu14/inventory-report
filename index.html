@@ -2367,11 +2367,11 @@ function importExcel(input){
       // 用 SKU+店铺+部门 作为唯一键来判断新旧
       function importKey(r){return (r.SKU||'')+'|'+(r.店铺||'')+'|'+(r.部门||'');}
 
-      // Excel内部去重：同key保留最后一条
-      var excelDedup={};
-      newData.forEach(function(r){excelDedup[importKey(r)]=r;});
-      var excelDupCount=newData.length-Object.keys(excelDedup).length;
-      newData=Object.values(excelDedup);
+      // Excel内部重复行统计（仅提示，不自动去重）
+      var excelKeys={};
+      newData.forEach(function(r){var k=importKey(r);excelKeys[k]=(excelKeys[k]||0)+1;});
+      var excelDupCount=0;
+      Object.values(excelKeys).forEach(function(v){if(v>1)excelDupCount+=v-1;});
 
       // Duplicate detection + preview
       var newSKUs=0,dupSKUs=0;
@@ -2381,7 +2381,7 @@ function importExcel(input){
       newData.forEach(function(r){if(existingSKUs[importKey(r)])dupSKUs++;else newSKUs++;});
       var replaceLabel=isAdmin0?'全部替换':'全部替换【'+authDept0+'】';
       var currentCount=isAdmin0?skuData.length:checkData.length;
-      var dupHint=excelDupCount>0?'  📋 Excel内重复行已合并: '+excelDupCount+' 条（同SKU+店铺+部门保留最后一条）\n':'';
+      var dupHint=excelDupCount>0?'  ⚠️ Excel内有 '+excelDupCount+' 行SKU+店铺+部门重复，请检查\n':'';
       var choice=await customConfirm(
         '📥 导入预览\n\n'+
         '共 '+newData.length+' 条数据\n'+
