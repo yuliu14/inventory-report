@@ -2394,6 +2394,12 @@ function importExcel(input){
         newData.forEach(function(r){if(!existingSKUs[importKey(r)])filteredNew.push(r);});
         if(filteredNew.length===0){alert('所有SKU均为重复，未导入任何数据。');input.value='';return;}
         newData=filteredNew;
+        // 部门用户：过滤掉非本部门数据
+        if(!isAdmin0){
+          var beforeCount=newData.length;
+          newData=newData.filter(function(r){return r['部门']===authDept0;});
+          if(newData.length<beforeCount)alert('⚠️ 已跳过 '+(beforeCount-newData.length)+' 条非【'+authDept0+'】的数据。');
+        }
       }
 
       // Merge data
@@ -2402,12 +2408,15 @@ function importExcel(input){
           // 管理员：全局替换
           skuData=newData;
         }else{
-          // 部门用户：只替换自己部门的SKU，保留其他部门数据
+          // 部门用户：只替换自己部门，过滤掉Excel中其他部门的数据
           var otherDepts=skuData.filter(function(r){return r['部门']!==authDept0;});
-          skuData=otherDepts.concat(newData);
+          var myNewData=newData.filter(function(r){return r['部门']===authDept0;});
+          var skippedDepts=newData.length-myNewData.length;
+          if(skippedDepts>0)alert('⚠️ 已跳过 '+skippedDepts+' 条非【'+authDept0+'】的数据，其他部门数据不受影响。');
+          skuData=otherDepts.concat(myNewData);
         }
       }else{
-        // Append new SKUs to existing data
+        // Append new SKUs to existing data (all departments for admin, all for dept user too since "仅添加新增")
         skuData=skuData.concat(newData);
       }
       skuData.forEach(function(r,i){
