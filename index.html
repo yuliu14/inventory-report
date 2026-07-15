@@ -1259,6 +1259,7 @@ loadPredictCfg();
 var opLog=[];
 function logOp(action,detail){opLog.push({time:new Date().toLocaleString(),action:action,detail:detail});if(opLog.length>200)opLog.shift();try{syncSave("opLog",opLog);}catch(e){}try{refreshLog();}catch(e){}}
 try{var savedLog=localStorage.getItem("opLog");if(savedLog)opLog=JSON.parse(savedLog);}catch(e){}
+function saveLog(){try{syncSave("opLog",opLog);}catch(e){}}
 
 function saveData(){
   try{
@@ -2090,7 +2091,7 @@ function filterSKUTable(type){
   if(dept)f=f.filter(function(r){return r["部门"]===dept;});
   if(store)f=f.filter(function(r){return r["店铺"]===store;});
   if(spu)f=f.filter(function(r){return r["spu"]===spu;});
-  if(type==="滞销"){f=f.filter(function(r){var d=r["在库+在途DOS_30d"]||r["FBA可售DOS"]||r["国内库存DOS"]||0;return d>90;});}
+  if(type==="滞销"){f=f.filter(function(r){return (r["总DOS"]||0)>90;});}
   else if(type==="断货"){f=f.filter(function(r){return ((r["FBA在库数量"]||0)+(r["fbm可售"]||0))<=0;});}
   else if(type==="长库龄"){f=f.filter(function(r){return (r["大于180天库存合计"]||0)>0;});}
   else if(type==="低DOS"){f=f.filter(function(r){var d=r["FBA可售DOS"]||r["国内库存DOS"]||0;return d>0&&d<7;});}
@@ -2360,12 +2361,15 @@ function importExcel(input){
 
       if(newData.length===0){alert('未解析到有效数据行！');input.value='';return;}
 
+      // 判断当前用户身份：部门用户只检查自己部门的SKU去重，管理员全局检查
+      var auth0=getAuth();var isAdmin0=auth0&&auth0.isAdmin;var authDept0=auth0&&!isAdmin0?auth0.dept:null;
+
       // Duplicate detection + preview
       var newSKUs=0,dupSKUs=0;
-      var existingSKUs={};skuData.forEach(function(r){existingSKUs[r.SKU]=r;});
+      var existingSKUs={};
+      var checkData=isAdmin0?skuData:skuData.filter(function(r){return r['部门']===authDept0;});
+      checkData.forEach(function(r){existingSKUs[r.SKU]=r;});
       newData.forEach(function(r){if(existingSKUs[r.SKU])dupSKUs++;else newSKUs++;});
-      // 判断当前用户身份：部门用户只能覆盖自己部门，管理员可以全局替换
-      var auth0=getAuth();var isAdmin0=auth0&&auth0.isAdmin;var authDept0=auth0&&!isAdmin0?auth0.dept:null;
       var replaceLabel=isAdmin0?'全部替换当前数据':'替换【'+authDept0+'】的旧数据（其他部门不受影响）';
       var choice=confirm('📥 导入预览\n\n共 '+newData.length+' 条数据\n  🆕 新增: '+newSKUs+' 条\n  🔄 重复SKU: '+dupSKUs+' 条\n  📦 当前已有: '+skuData.length+' 条\n  👤 当前身份: '+(isAdmin0?'管理员':authDept0)+'\n\n点「确定」= '+replaceLabel+'\n点「取消」= 跳过重复SKU，仅导入新数据');
       if(!choice){
