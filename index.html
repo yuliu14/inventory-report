@@ -1507,9 +1507,11 @@ function renderAlerts(alerts){
   // 拆分成断货和滞销两组
   var stockAlerts=allFiltered.filter(function(a){return a.type==='stockout';});
   var overAlerts=allFiltered.filter(function(a){return a.type==='overstock';});
+  var totalStock=alerts.filter(function(a){return a.type==='stockout';});
   var totalOver=alerts.filter(function(a){return a.type==='overstock';});
+  var stockProcessedCount=totalStock.filter(function(a){return isAlertProcessed(a.sku._id,a.type);}).length;
   var overProcessedCount=totalOver.filter(function(a){return isAlertProcessed(a.sku._id,a.type);}).length;
-  return renderStockPanel(stockAlerts,showProcessed,processedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed,overProcessedCount,totalOver.length);
+  return renderStockPanel(stockAlerts,showProcessed,stockProcessedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed,overProcessedCount,totalOver.length);
 }
 
 function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
