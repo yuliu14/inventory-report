@@ -2370,11 +2370,18 @@ function importExcel(input){
       var checkData=isAdmin0?skuData:skuData.filter(function(r){return r['部门']===authDept0;});
       checkData.forEach(function(r){existingSKUs[r.SKU]=r;});
       newData.forEach(function(r){if(existingSKUs[r.SKU])dupSKUs++;else newSKUs++;});
-      var replaceLabel=isAdmin0?'全部替换':'替换【'+authDept0+'】的旧数据（其他部门不受影响）';
+      var replaceLabel=isAdmin0?'覆盖更新全部数据':'覆盖更新【'+authDept0+'】已有SKU';
       var choice=await customConfirm(
-        '📥 导入预览\n\n共 '+newData.length+' 条数据\n  🆕 新增: '+newSKUs+' 条\n  🔄 重复SKU: '+dupSKUs+' 条\n  📦 当前已有: '+skuData.length+' 条\n  👤 当前身份: '+(isAdmin0?'管理员':authDept0),
+        '📥 导入预览\n\n'+
+        '共 '+newData.length+' 条数据\n'+
+        '  🆕 新SKU: '+newSKUs+' 条 → 系统中没有，会直接添加\n'+
+        '  🔄 已有SKU: '+dupSKUs+' 条 → 系统中已存在同编码SKU\n'+
+        '  📦 当前'+(isAdmin0?'':'部门')+'已有: '+skuData.length+' 条\n'+
+        '  👤 当前身份: '+(isAdmin0?'管理员':authDept0)+'\n'+
+        '\n'+
+        '💡 对已有的 '+dupSKUs+' 条数据，请选择处理方式：',
         replaceLabel,
-        '仅导入新数据'
+        '仅添加新SKU（已有不变）'
       );
       if(!choice){
         // Skip duplicates
