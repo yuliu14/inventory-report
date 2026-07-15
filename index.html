@@ -2373,7 +2373,7 @@ function importExcel(input){
       var checkData=isAdmin0?skuData:skuData.filter(function(r){return r['部门']===authDept0;});
       checkData.forEach(function(r){existingSKUs[importKey(r)]=r;});
       newData.forEach(function(r){if(existingSKUs[importKey(r)])dupSKUs++;else newSKUs++;});
-      var replaceLabel=isAdmin0?'覆盖更新全部SKU':'覆盖更新【'+authDept0+'】全部SKU';
+      var replaceLabel=isAdmin0?'全部替换':'全部替换【'+authDept0+'】';
       var currentCount=isAdmin0?skuData.length:checkData.length;
       var choice=await customConfirm(
         '📥 导入预览\n\n'+
