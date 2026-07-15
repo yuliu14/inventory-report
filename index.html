@@ -401,7 +401,7 @@ function openRemark(btn,type,name,dept,store,skuId){
   pop.style.position='fixed';pop.style.left=Math.min(rect.left,window.innerWidth-240)+'px';pop.style.top=Math.min(rect.bottom+4,window.innerHeight-180)+'px';
   pop.innerHTML='<textarea id="remarkText" placeholder="输入备注...">'+esc(existing)+'</textarea>'+
     '<div class="r-acts"><button class="btn btn-xs" onclick="closeRemarkPopup()">取消</button>'+
-    '<button class="btn btn-xs btn-pri" onclick="saveRemark(\''+esc(key)+'\','+(skuId!==undefined?skuId:'null')+')">💾 保存</button></div>';
+    '<button class="btn btn-xs btn-pri" onclick="saveRemark(\''+escA(key)+'\','+(skuId!==undefined?skuId:'null')+')">💾 保存</button></div>';
   document.body.appendChild(pop);
   setTimeout(function(){var ta=document.getElementById('remarkText');if(ta)ta.focus();},50);
   document.addEventListener('click',onDocClickRemark);
@@ -724,13 +724,13 @@ function initNav(){
   }
   Object.entries(depts).forEach(function(e){
     var d=e[0],rs=e[1],sts=grpBy('店铺',rs);
-    h+='<div class="nav-item" data-level="dept" data-dept="'+esc(d)+'" onclick="navClick(this,\'dept\',\''+esc(d)+'\')"><div class="row"><span class="icon">📂</span> <span class="nav-label">'+esc(d)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;dept&#39;,&#39;'+esc(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+rs.length+'</span></div><div class="nav-children">';
+    h+='<div class="nav-item" data-level="dept" data-dept="'+esc(d)+'" onclick="navClick(this,\'dept\',\''+escA(d)+'\')"><div class="row"><span class="icon">📂</span> <span class="nav-label">'+esc(d)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;dept&#39;,&#39;'+escA(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+rs.length+'</span></div><div class="nav-children">';
     Object.entries(sts).forEach(function(e2){
       var s=e2[0],srs=e2[1],sps=grpBy('spu',srs);
-      h+='<div class="nav-item" data-level="store" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" onclick="event.stopPropagation();navClick(this,\'store\',\''+esc(d)+'\',\''+esc(s)+'\')"><div class="row"><span class="icon">🏪</span> <span class="nav-label">'+esc(s)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;store&#39;,&#39;'+esc(s)+'&#39;,&#39;'+esc(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+srs.length+'</span></div><div class="nav-children">';
+      h+='<div class="nav-item" data-level="store" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" onclick="event.stopPropagation();navClick(this,\'store\',\''+escA(d)+'\',\''+escA(s)+'\')"><div class="row"><span class="icon">🏪</span> <span class="nav-label">'+esc(s)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;store&#39;,&#39;'+escA(s)+'&#39;,&#39;'+escA(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+srs.length+'</span></div><div class="nav-children">';
       Object.entries(sps).forEach(function(e3){
         var sp=e3[0],prs=e3[1];
-        h+='<div class="nav-item" data-level="spu" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" data-spu="'+esc(sp)+'" onclick="event.stopPropagation();navClick(this,\'spu\',\''+esc(d)+'\',\''+esc(s)+'\',\''+esc(sp)+'\')"><div class="row"><span class="icon">📦</span> <span class="nav-label">'+esc(sp)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;spu&#39;,&#39;'+esc(sp)+'&#39;,&#39;'+esc(d)+'&#39;,&#39;'+esc(s)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+prs.length+'</span></div></div>';
+        h+='<div class="nav-item" data-level="spu" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" data-spu="'+esc(sp)+'" onclick="event.stopPropagation();navClick(this,\'spu\',\''+escA(d)+'\',\''+escA(s)+'\',\''+escA(sp)+'\')"><div class="row"><span class="icon">📦</span> <span class="nav-label">'+esc(sp)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;spu&#39;,&#39;'+escA(sp)+'&#39;,&#39;'+escA(d)+'&#39;,&#39;'+escA(s)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+prs.length+'</span></div></div>';
       });
       h+='</div></div>';
     });
@@ -847,9 +847,9 @@ function aggTbl(title,rows,type){
     var name=item.name,a=item.agg,data=item.data;
     var tv=(a.海外现货货值||0)+(a.海外在途货值||0)+(a.国内现货货值||0)+(a.国内在制货值||0);
     var clk;
-    if(type==='dept'){clk="navClick(findNav('dept','"+esc(name)+"'),'dept','"+esc(name)+"')";}
-    else if(type==='store'){clk="navClick(findNav('store','"+esc(data[0]['部门'])+"','"+esc(name)+"'),'store','"+esc(data[0]['部门'])+"','"+esc(name)+"')";}
-    else{clk="navClick(findNav('spu','"+esc(data[0]['部门'])+"','"+esc(data[0]['店铺'])+"','"+esc(name)+"'),'spu','"+esc(data[0]['部门'])+"','"+esc(data[0]['店铺'])+"','"+esc(name)+"')";}
+    if(type==='dept'){clk="navClick(findNav('dept','"+escA(name)+"'),'dept','"+escA(name)+"')";}
+    else if(type==='store'){clk="navClick(findNav('store','"+escA(data[0]['部门'])+"','"+escA(name)+"'),'store','"+escA(data[0]['部门'])+"','"+escA(name)+"')";}
+    else{clk="navClick(findNav('spu','"+escA(data[0]['部门'])+"','"+escA(data[0]['店铺'])+"','"+escA(name)+"'),'spu','"+escA(data[0]['部门'])+"','"+escA(data[0]['店铺'])+"','"+escA(name)+"')";}
     var rk;if(type==='dept')rk='dept:'+name;else if(type==='store')rk='store:'+data[0]['部门']+':'+name;else rk='spu:'+data[0]['部门']+':'+data[0]['店铺']+':'+name;
     var hasRk=!!aggRemarks[rk];
     var isHL=(dosHighlight&&matchesDosHighlight(a))||(ageHighlight&&matchesAgeHighlight(a));
@@ -866,14 +866,14 @@ function aggTbl(title,rows,type){
       '<td>'+fmtM(a.海外现货货值)+'</td><td>'+fmtM(a.海外在途货值)+'</td><td>'+fmtM(a.国内现货货值)+'</td><td>'+fmtM(a.国内在制货值)+'</td>'+
       '<td>'+fmt(a['0-30天库龄数量'])+'</td><td>'+fmt(a['31-60天库龄数量'])+'</td><td>'+fmt(a['61-90天库龄数量'])+'</td><td>'+fmt(a['91-180天库龄数量'])+'</td><td>'+fmt(a['181-270天库龄数量'])+'</td><td>'+fmt(a['271-330天库龄数量'])+'</td><td>'+fmt(a['331-365天库龄数量'])+'</td><td style="color:'+(a['大于365天库龄数量']>0?'#e11d48':'inherit')+'">'+fmt(a['大于365天库龄数量'])+'</td>'+
       '<td>'+
-      '<button class="remark-btn'+(hasRk?' has-note':'')+'" onclick="openRemark(this,\''+esc(type)+'\',\''+esc(name)+'\',\''+(type!=='dept'?esc(data[0]['部门']):'')+'\',\''+(type==='spu'?esc(data[0]['店铺']):'')+'\')" title="添加备注">💬</button>'+
+      '<button class="remark-btn'+(hasRk?' has-note':'')+'" onclick="openRemark(this,\''+escA(type)+'\',\''+escA(name)+'\',\''+(type!=='dept'?escA(data[0]['部门']):'')+'\',\''+(type==='spu'?escA(data[0]['店铺']):'')+'\')" title="添加备注">💬</button>'+
       '</td>'+
       '<td>'+
       (type==='dept'
-        ?'<button class="btn btn-xs" onclick="deleteDept(\''+esc(name)+'\')" title="删除部门" style="color:#e11d48">🗑️</button>'
+        ?'<button class="btn btn-xs" onclick="deleteDept(\''+escA(name)+'\')" title="删除部门" style="color:#e11d48">🗑️</button>'
         :type==='store'
-        ?'<button class="btn btn-xs" onclick="deleteStore(\''+esc(data[0]['部门'])+'\',\''+esc(name)+'\')" title="删除店铺" style="color:#e11d48">🗑️</button>'
-        :'<button class="btn btn-xs" onclick="deleteSPU(\''+esc(data[0]['部门'])+'\',\''+esc(data[0]['店铺'])+'\',\''+esc(name)+'\')" title="删除SPU" style="color:#e11d48">🗑️</button>')+
+        ?'<button class="btn btn-xs" onclick="deleteStore(\''+escA(data[0]['部门'])+'\',\''+escA(name)+'\')" title="删除店铺" style="color:#e11d48">🗑️</button>'
+        :'<button class="btn btn-xs" onclick="deleteSPU(\''+escA(data[0]['部门'])+'\',\''+escA(data[0]['店铺'])+'\',\''+escA(name)+'\')" title="删除SPU" style="color:#e11d48">🗑️</button>')+
       '</td>'+
     '</tr>';
   });
@@ -2745,7 +2745,9 @@ function customConfirm(msg,btnOk,btnCancel){
 }
 function fmt(n){if(n===null||n===undefined||isNaN(n))return'0';return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:1});}
 function fmtM(n){if(n===null||n===undefined||isNaN(n))return'$0';return'$'+Number(n).toLocaleString('zh-CN',{maximumFractionDigits:0});}
-function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// JS字符串内嵌到HTML属性中（如onclick），需要额外转义单引号和反斜杠
+function escA(s){if(!s)return'';return esc(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.className='toast ok';t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2500);}
 </script>
 
