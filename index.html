@@ -372,7 +372,7 @@ function fireInit(){
 
         if(!_fireReady){
           // 首次加载：用云端数据覆盖 localStorage
-          var keys = ['skuData','replenOrders','deptPasswords','adminPwd','healthCfg','alertCfg','predictCfg','processedAlerts','trendData','opLog','aggRemarks'];
+          var keys = ['skuData','replenOrders','deptPasswords','adminPwd','healthCfg','alertCfg','predictCfg','processedAlerts','opLog','aggRemarks'];
           var count = 0;
           keys.forEach(function(k){
             if(serverData[k] !== undefined){
@@ -420,7 +420,6 @@ function reloadFromStorage(){
   try{var d=localStorage.getItem('alertCfg');if(d)alertCfg=JSON.parse(d);}catch(e){}
   try{var d=localStorage.getItem('predictCfg');if(d)predictCfg=JSON.parse(d);}catch(e){}
   try{var d=localStorage.getItem('processedAlerts');if(d){var parsed=JSON.parse(d);if(parsed&&typeof parsed==='object')processedAlerts=parsed;}}catch(e){}
-  try{var d=localStorage.getItem('trendData');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))trendData=parsed;}}catch(e){}
   try{var d=localStorage.getItem('opLog');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))opLog=parsed;}}catch(e){}
   try{var d=localStorage.getItem('aggRemarks');if(d){var parsed=JSON.parse(d);if(parsed&&typeof parsed==='object')aggRemarks=parsed;}}catch(e){}
 }
@@ -1117,25 +1116,11 @@ function showSKUDetail(dept,store,spu){
 // ============================================================
 function charts(data){
   return '<div class="chart-row">'+
-    (trendData.length>1?'<div class="panel" style="margin-bottom:10px;grid-column:1/-1"><div class="panel-hd">📈 数据趋势 <button class="btn btn-xs" onclick="clearTrendData()" style="margin-left:8px" title="清除趋势数据">🗑️</button></div><div class="panel-bd"><div class="chart-wrap" style="height:180px"><canvas id="cTrend"></canvas></div></div></div>':'')+
     '<div class="panel"><div class="panel-hd">📊 DOS分布 (可售综合)</div><div class="panel-bd"><div class="chart-wrap"><canvas id="cDOS"></canvas></div></div></div>'+
     '<div class="panel"><div class="panel-hd">📦 库龄结构</div><div class="panel-bd"><div class="chart-wrap"><canvas id="cAge"></canvas></div></div></div>'+
   '</div>';
 }
 function initCharts(data){
-  // Trend chart
-  if(trendData.length>1){
-    var c0=document.getElementById('cTrend');
-    if(c0){
-      if(c0._c)c0._c.destroy();
-      var tl=trendData.map(function(e){return e.t.slice(5);});
-      c0._c=new Chart(c0,{type:'line',data:{labels:tl,datasets:[
-        {label:'总库存(件)',data:trendData.map(function(e){return e.inv;}),borderColor:'#3b82f6',backgroundColor:'transparent',tension:0.3,yAxisID:'y'},
-        {label:'总DOS(天)',data:trendData.map(function(e){return Math.round(e.dos);}),borderColor:'#f59e0b',backgroundColor:'transparent',tension:0.3,yAxisID:'y1'},
-        {label:'滞销占比(%)',data:trendData.map(function(e){return Math.round(e.stale);}),borderColor:'#ef4444',backgroundColor:'transparent',tension:0.3,yAxisID:'y1'}
-      ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{boxWidth:12,font:{size:9}}}},scales:{y:{type:'linear',position:'left',title:{display:false}},y1:{type:'linear',position:'right',title:{display:false},grid:{drawOnChartArea:false}}}}});
-    }
-  }
   var c1=document.getElementById('cDOS');
   if(c1){
     if(c1._c)c1._c.destroy();
@@ -1198,21 +1183,6 @@ function markAlertProcessed(skuId,type){
   if(overPanel){var lst2=overPanel.nextElementSibling;window._overOpen=lst2&&lst2.classList.contains('open');}
   refresh();
 }
-var trendData=[];
-try{var td=localStorage.getItem('trendData');if(td)trendData=JSON.parse(td);}catch(e){}
-function recordTrend(){
-  try{
-    var a=agg(skuData);
-    var stale=a['大于180天库存合计']||0;
-    var total=a['总库存']||1;
-    var entry={t:new Date().toISOString().slice(0,16),sku:a.count,inv:a['总库存']||0,dos:a['总库存']/(a['预估日销']||1),stale:stale/total*100};
-    trendData.push(entry);
-    if(trendData.length>60)trendData=trendData.slice(-60);
-    syncSave('trendData',trendData);
-  }catch(e){}
-}
-function clearTrendData(){trendData=[];localStorage.removeItem('trendData');refresh();}
-
 function clearProcessedAlerts(){
   processedAlerts={};saveProcessedAlerts();
   window._showProcessed=false;
@@ -1380,7 +1350,6 @@ function autoSave(){
     try{
       var d=skuData.map(function(r){var o={};for(var k in r){if(k!=='_orig'&&k!=='_id')o[k]=r[k];}return o;});
       syncSave("skuData",d);
-      recordTrend();
       var badge=document.getElementById("autoSaveBadge");
       if(badge){badge.textContent="已自动保存";badge.style.color="#10b981";
         setTimeout(function(){if(badge)badge.textContent="";},2000);}
