@@ -1643,7 +1643,7 @@ function renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed
 
   // List body
   if(window._stockOpen===undefined)window._stockOpen=true;
-  h+='<div class="alert-list'+(window._stockOpen?' open':'')+'" style="max-height:380px;overflow:auto;max-width:100%">';
+  h+='<div class="alert-list'+(window._stockOpen?' open':'')+'" style="max-height:380px;overflow-y:auto;overflow-x:auto;max-width:100%;display:'+(window._stockOpen?'block':'none')+'">';
   var colWidths=[
     {w:'30px',a:'center',l:''},{w:'48px',a:'center',l:'优先级'},
     {w:'105px',a:'left',l:'SKU'},{w:'60px',a:'left',l:'品名'},{w:'55px',a:'left',l:'店铺'},
@@ -1651,11 +1651,11 @@ function renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed
     {w:'52px',a:'right',l:'FBA<br>可售DOS'},{w:'52px',a:'right',l:'FBM<br>可售DOS'},
     {w:'48px',a:'right',l:'日销<br>/天'},{w:'56px',a:'right',l:'📦建议<br>补货'},
   ];
-  h+='<div style="border-bottom:2px solid var(--border);background:#fafafa;display:flex;align-items:center;font-size:10px;font-weight:600;color:var(--text2);min-width:fit-content;position:sticky;top:0;z-index:2">';
+  h+='<div style="border-bottom:2px solid var(--border);background:#fafafa;display:flex;align-items:center;font-size:10px;font-weight:600;color:var(--text2);min-width:658px;position:sticky;top:0;z-index:2">';
   colWidths.forEach(function(c){h+='<div style="width:'+c.w+';text-align:'+c.a+';padding:5px 3px;flex-shrink:0">'+c.l+'</div>';});
   h+='</div>';
 
-  h+='<div style="min-width:fit-content">';
+  h+='<div style="min-width:658px">';
   if(!stockAlerts.length){
     h+='<div style="padding:16px;text-align:center;color:var(--text2);font-size:11px">✅ 暂无断货预警</div>';
   }else{
@@ -1708,7 +1708,7 @@ function renderOverPanel(overAlerts,showProcessed,stockProcessed,overProcessed,t
   h+='</div></div>';
 
   if(window._overOpen===undefined)window._overOpen=true;
-  h+='<div class="alert-list'+(window._overOpen?' open':'')+'" style="max-height:380px;overflow:auto;max-width:100%">';
+  h+='<div class="alert-list'+(window._overOpen?' open':'')+'" style="max-height:380px;overflow-y:auto;overflow-x:auto;max-width:100%;display:'+(window._overOpen?'block':'none')+'">';
   var colWidths=[
     {w:'28px',a:'center',l:''},
     {w:'48px',a:'center',l:'优先级'},{w:'110px',a:'left',l:'SKU'},{w:'65px',a:'left',l:'品名'},{w:'60px',a:'left',l:'店铺'},
@@ -1717,11 +1717,11 @@ function renderOverPanel(overAlerts,showProcessed,stockProcessed,overProcessed,t
     {w:'48px',a:'right',l:'总<br>DOS'},{w:'52px',a:'right',l:'总<br>库存'},
     {w:'52px',a:'right',l:'长库龄<br>占比'},
   ];
-  h+='<div style="border-bottom:2px solid var(--border);background:#fafafa;display:flex;align-items:center;font-size:10px;font-weight:600;color:var(--text2);min-width:fit-content;position:sticky;top:0;z-index:2">';
+  h+='<div style="border-bottom:2px solid var(--border);background:#fafafa;display:flex;align-items:center;font-size:10px;font-weight:600;color:var(--text2);min-width:719px;position:sticky;top:0;z-index:2">';
   colWidths.forEach(function(c){h+='<div style="width:'+c.w+';text-align:'+c.a+';padding:5px 3px;flex-shrink:0">'+c.l+'</div>';});
   h+='</div>';
 
-  h+='<div style="min-width:fit-content">';
+  h+='<div style="min-width:719px">';
   if(!overAlerts.length){
     h+='<div style="padding:16px;text-align:center;color:var(--text2);font-size:11px">✅ 暂无滞销预警</div>';
   }else{
