@@ -2608,6 +2608,9 @@ function importExcel(input){
         r._orig=JSON.parse(JSON.stringify(r));
       });
 
+      // 清理旧的预警状态（新数据不应继承旧的处理标记）
+      if(choice){processedAlerts={};saveProcessedAlerts();}
+      window._uncheckedStockout={};saveUnchecked();
       saveData();
       rebuildAll();
       showToast('✅ 成功导入 '+(choice?'':'新增')+newData.length+' 条，当前共 '+skuData.length+' 条SKU！');
