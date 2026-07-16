@@ -410,9 +410,10 @@ function fireInit(){
   });
 }
 
-// 从 localStorage 重新加载内存变量
+// 从 localStorage 重新加载内存变量（Firestore 外部更新时调用）
+// ⚠️ 必须给 skuData 重新分配 _id，否则复选框 key 全变成 "undefined|stockout"
 function reloadFromStorage(){
-  try{var d=localStorage.getItem('skuData');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))skuData=parsed;}}catch(e){}
+  try{var d=localStorage.getItem('skuData');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed)){skuData=parsed;skuData.forEach(function(r,i){r._id=i;});}}}catch(e){}
   try{var d=localStorage.getItem('replenOrders');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))replenOrders=parsed;}}catch(e){}
   try{var d=localStorage.getItem('deptPasswords');if(d)_deptPwdsCache=JSON.parse(d);}catch(e){}
   try{var d=localStorage.getItem('healthCfg');if(d)healthCfg=JSON.parse(d);}catch(e){}
