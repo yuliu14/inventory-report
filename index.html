@@ -11,12 +11,12 @@
 // XLSX CDN 备用加载 — 主CDN失败时自动切换
 if(typeof XLSX==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');}
 </script>
-<!-- Firebase SDK — 多重CDN备用，国内优先 -->
-<script src="https://cdn.bootcdn.net/ajax/libs/firebase/10.12.0/firebase-app-compat.js"></script>
+<!-- Firebase SDK — 本地托管（国内可访问），Google CDN备用 -->
+<script src="firebase-app.js"></script>
 <script>if(typeof firebase==='undefined'){document.write('<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"><\/script>');}</script>
-<script src="https://cdn.bootcdn.net/ajax/libs/firebase/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-auth.js"></script>
 <script>if(typeof firebase==='undefined'||!firebase.auth){document.write('<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"><\/script>');}</script>
-<script src="https://cdn.bootcdn.net/ajax/libs/firebase/10.12.0/firebase-firestore-compat.js"></script>
+<script src="firebase-firestore.js"></script>
 <script>if(typeof firebase==='undefined'||!firebase.firestore){document.write('<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"><\/script>');}</script>
 <style>
 :root{
