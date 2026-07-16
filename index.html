@@ -1181,8 +1181,8 @@ function alertKey(skuId,type){return skuId+'|'+type;}
 function isAlertProcessed(skuId,type){
   var newKey=alertKey(skuId,type);
   if(processedAlerts[newKey]!==undefined)return !!processedAlerts[newKey];
-  // 兼容旧格式：纯数字key视为"全部类型已处理"
-  if(processedAlerts[skuId]!==undefined&&typeof processedAlerts[skuId]==='number')return !!processedAlerts[skuId];
+  // 兼容旧格式：纯数字key只对断货类型生效（旧数据只有断货预警）
+  if(type==='stockout'&&processedAlerts[skuId]!==undefined&&typeof processedAlerts[skuId]==='number')return !!processedAlerts[skuId];
   return false;
 }
 function saveProcessedAlerts(){try{syncSave('processedAlerts',processedAlerts);}catch(e){}}
@@ -1676,8 +1676,8 @@ function renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed
   if(showProcessed){
     h+=' <button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(false)" style="margin-left:6px;font-size:10px;color:#2563eb;border-color:#bfdbfe">🔙 返回未处理</button>';
   }else if(stockAlerts.length>0){
-    h+=' <button class="btn btn-xs btn-pri" onclick="event.stopPropagation();generateROFromAlerts()" style="margin-left:6px;font-size:10px">📋 生成补货单('+checkedStockout+')</button>';
-    h+=' <span style="font-size:9px;color:var(--text2);margin-left:4px;cursor:pointer" onclick="event.stopPropagation();toggleAllStockoutChecks()">'+(checkedStockout===stockAlerts.length?'取消全选':'全选断货')+'</span>';
+    h+=' <button class="btn btn-xs btn-pri" id="roGenBtn" onclick="event.stopPropagation();generateROFromAlerts()" style="margin-left:6px;font-size:10px">📋 生成补货单('+checkedStockout+')</button>';
+    h+=' <span id="stockoutToggleAll" style="font-size:9px;color:var(--text2);margin-left:4px;cursor:pointer" onclick="event.stopPropagation();toggleAllStockoutChecks()">'+(checkedStockout===stockAlerts.length?'取消全选':'全选断货')+'</span>';
   }
   h+='</div><div class="a-counts">';
   ['urgent','high','medium','low'].forEach(function(lv){if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+counts[lv]+' '+labels[lv]+'</span>';});
@@ -1714,7 +1714,7 @@ function renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed
       var cDOS=function(v,th){if(v<=0)return'#dc2626';if(v<th)return'#f59e0b';return'inherit';};
       h+='<div class="'+lvCls[a.level]+'" style="display:flex;align-items:center;font-size:10px;border-bottom:1px solid #f1f5f9;min-width:fit-content'+(isDone?';opacity:0.5':'')+'">';
       if(!showProcessed){
-        h+='<div style="width:30px;text-align:center;padding:4px 0;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();toggleAlertCheck('+a.sku._id+',\'stockout\')"><span style="font-size:14px;color:'+(checked?'#3b82f6':'#d1d5db')+'">'+(checked?'☑':'☐')+'</span></div>';
+        h+='<div style="width:30px;text-align:center;padding:4px 0;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();toggleAlertCheck('+a.sku._id+',\'stockout\')"><span data-ck="'+alertCheckKey(a.sku._id,'stockout')+'" style="font-size:14px;color:'+(checked?'#3b82f6':'#d1d5db')+'">'+(checked?'☑':'☐')+'</span></div>';
       }else{h+='<div style="width:30px;flex-shrink:0"></div>';}
       h+='<div style="width:48px;text-align:center;padding:4px 3px;flex-shrink:0"><span class="a-pri '+priCls[a.level]+'">🔴 断货</span></div>';
       h+='<div style="width:105px;font-weight:600;padding:4px 3px;flex-shrink:0;font-size:10px">'+esc(a.sku.SKU||'')+'</div>';
@@ -1806,9 +1806,30 @@ function renderOverPanel(overAlerts,showProcessed,stockProcessed,overProcessed,t
 
 function toggleAlertCheck(skuId,type){
   toggleAlertCheckDirect(skuId,type);
-  var sp=document.querySelector('.alert-list.open');
-  window._stockOpen=!!sp;
-  refresh();
+  // 直接更新当前页面上该SKU的勾选图标，不触发全量刷新
+  var key=alertCheckKey(skuId,type);
+  var nowChecked=isAlertChecked(skuId,type);
+  var icons=document.querySelectorAll('[data-ck="'+key+'"]');
+  for(var i=0;i<icons.length;i++){
+    icons[i].textContent=nowChecked?'☑':'☐';
+    icons[i].style.color=nowChecked?'#3b82f6':'#d1d5db';
+  }
+  // 更新「生成补货单(N)」按钮和全选链接文字
+  updateStockoutCheckUI();
+}
+
+// 更新断货面板的勾选计数UI（按钮数字 + 全选/取消全选）
+function updateStockoutCheckUI(){
+  var alerts=getAlerts();
+  var stockAlerts=alerts.filter(function(a){return a.type==='stockout'&&!isAlertProcessed(a.sku._id,a.type);});
+  var checkedCount=0;
+  stockAlerts.forEach(function(a){if(isAlertChecked(a.sku._id,'stockout'))checkedCount++;});
+  // 更新生成补货单按钮
+  var btn=document.getElementById('roGenBtn');
+  if(btn)btn.textContent='📋 生成补货单('+checkedCount+')';
+  // 更新全选/取消全选
+  var toggleSpan=document.getElementById('stockoutToggleAll');
+  if(toggleSpan)toggleSpan.textContent=checkedCount===stockAlerts.length?'取消全选':'全选断货';
 }
 function toggleAllStockoutChecks(){
   var alerts=getAlerts();
