@@ -488,7 +488,7 @@ function openRemark(btn,type,name,dept,store,skuId){
   pop.style.position='fixed';pop.style.left=Math.min(rect.left,window.innerWidth-240)+'px';pop.style.top=Math.min(rect.bottom+4,window.innerHeight-180)+'px';
   pop.innerHTML='<textarea id="remarkText" placeholder="输入备注...">'+esc(existing)+'</textarea>'+
     '<div class="r-acts"><button class="btn btn-xs" onclick="closeRemarkPopup()">取消</button>'+
-    '<button class="btn btn-xs btn-pri" onclick="saveRemark(\''+escA(key)+'\','+(skuId!==undefined?skuId:'null')+')">💾 保存</button></div>';
+    '<button class="btn btn-xs btn-pri" onclick="saveRemark(\''+esc(key)+'\','+(skuId!==undefined?skuId:'null')+')">💾 保存</button></div>';
   document.body.appendChild(pop);
   setTimeout(function(){var ta=document.getElementById('remarkText');if(ta)ta.focus();},50);
   document.addEventListener('click',onDocClickRemark);
@@ -811,13 +811,13 @@ function initNav(){
   }
   Object.entries(depts).forEach(function(e){
     var d=e[0],rs=e[1],sts=grpBy('店铺',rs);
-    h+='<div class="nav-item" data-level="dept" data-dept="'+esc(d)+'" onclick="navClick(this,\'dept\',\''+escA(d)+'\')"><div class="row"><span class="icon">📂</span> <span class="nav-label">'+esc(d)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;dept&#39;,&#39;'+escA(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+rs.length+'</span></div><div class="nav-children">';
+    h+='<div class="nav-item" data-level="dept" data-dept="'+esc(d)+'" onclick="navClick(this,\'dept\',\''+esc(d)+'\')"><div class="row"><span class="icon">📂</span> <span class="nav-label">'+esc(d)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;dept&#39;,&#39;'+esc(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+rs.length+'</span></div><div class="nav-children">';
     Object.entries(sts).forEach(function(e2){
       var s=e2[0],srs=e2[1],sps=grpBy('spu',srs);
-      h+='<div class="nav-item" data-level="store" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" onclick="event.stopPropagation();navClick(this,\'store\',\''+escA(d)+'\',\''+escA(s)+'\')"><div class="row"><span class="icon">🏪</span> <span class="nav-label">'+esc(s)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;store&#39;,&#39;'+escA(s)+'&#39;,&#39;'+escA(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+srs.length+'</span></div><div class="nav-children">';
+      h+='<div class="nav-item" data-level="store" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" onclick="event.stopPropagation();navClick(this,\'store\',\''+esc(d)+'\',\''+esc(s)+'\')"><div class="row"><span class="icon">🏪</span> <span class="nav-label">'+esc(s)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;store&#39;,&#39;'+esc(s)+'&#39;,&#39;'+esc(d)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+srs.length+'</span></div><div class="nav-children">';
       Object.entries(sps).forEach(function(e3){
         var sp=e3[0],prs=e3[1];
-        h+='<div class="nav-item" data-level="spu" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" data-spu="'+esc(sp)+'" onclick="event.stopPropagation();navClick(this,\'spu\',\''+escA(d)+'\',\''+escA(s)+'\',\''+escA(sp)+'\')"><div class="row"><span class="icon">📦</span> <span class="nav-label">'+esc(sp)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;spu&#39;,&#39;'+escA(sp)+'&#39;,&#39;'+escA(d)+'&#39;,&#39;'+escA(s)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+prs.length+'</span></div></div>';
+        h+='<div class="nav-item" data-level="spu" data-dept="'+esc(d)+'" data-store="'+esc(s)+'" data-spu="'+esc(sp)+'" onclick="event.stopPropagation();navClick(this,\'spu\',\''+esc(d)+'\',\''+esc(s)+'\',\''+esc(sp)+'\')"><div class="row"><span class="icon">📦</span> <span class="nav-label">'+esc(sp)+'</span> <span class="nav-edit" onclick="event.stopPropagation();renameEntity(&#39;spu&#39;,&#39;'+esc(sp)+'&#39;,&#39;'+esc(d)+'&#39;,&#39;'+esc(s)+'&#39;)" title="重命名">✏️</span> <span class="badge">'+prs.length+'</span></div></div>';
       });
       h+='</div></div>';
     });
@@ -934,9 +934,9 @@ function aggTbl(title,rows,type){
     var name=item.name,a=item.agg,data=item.data;
     var tv=(a.海外现货货值||0)+(a.海外在途货值||0)+(a.国内现货货值||0)+(a.国内在制货值||0);
     var clk;
-    if(type==='dept'){clk="navClick(findNav('dept','"+escA(name)+"'),'dept','"+escA(name)+"')";}
-    else if(type==='store'){clk="navClick(findNav('store','"+escA(data[0]['部门'])+"','"+escA(name)+"'),'store','"+escA(data[0]['部门'])+"','"+escA(name)+"')";}
-    else{clk="navClick(findNav('spu','"+escA(data[0]['部门'])+"','"+escA(data[0]['店铺'])+"','"+escA(name)+"'),'spu','"+escA(data[0]['部门'])+"','"+escA(data[0]['店铺'])+"','"+escA(name)+"')";}
+    if(type==='dept'){clk="navClick(findNav('dept','"+esc(name)+"'),'dept','"+esc(name)+"')";}
+    else if(type==='store'){clk="navClick(findNav('store','"+esc(data[0]['部门'])+"','"+esc(name)+"'),'store','"+esc(data[0]['部门'])+"','"+esc(name)+"')";}
+    else{clk="navClick(findNav('spu','"+esc(data[0]['部门'])+"','"+esc(data[0]['店铺'])+"','"+esc(name)+"'),'spu','"+esc(data[0]['部门'])+"','"+esc(data[0]['店铺'])+"','"+esc(name)+"')";}
     var rk;if(type==='dept')rk='dept:'+name;else if(type==='store')rk='store:'+data[0]['部门']+':'+name;else rk='spu:'+data[0]['部门']+':'+data[0]['店铺']+':'+name;
     var hasRk=!!aggRemarks[rk];
     var isHL=(dosHighlight&&matchesDosHighlight(a))||(ageHighlight&&matchesAgeHighlight(a));
@@ -953,14 +953,14 @@ function aggTbl(title,rows,type){
       '<td>'+fmtM(a.海外现货货值)+'</td><td>'+fmtM(a.海外在途货值)+'</td><td>'+fmtM(a.国内现货货值)+'</td><td>'+fmtM(a.国内在制货值)+'</td>'+
       '<td>'+fmt(a['0-30天库龄数量'])+'</td><td>'+fmt(a['31-60天库龄数量'])+'</td><td>'+fmt(a['61-90天库龄数量'])+'</td><td>'+fmt(a['91-180天库龄数量'])+'</td><td>'+fmt(a['181-270天库龄数量'])+'</td><td>'+fmt(a['271-330天库龄数量'])+'</td><td>'+fmt(a['331-365天库龄数量'])+'</td><td style="color:'+(a['大于365天库龄数量']>0?'#e11d48':'inherit')+'">'+fmt(a['大于365天库龄数量'])+'</td>'+
       '<td>'+
-      '<button class="remark-btn'+(hasRk?' has-note':'')+'" onclick="openRemark(this,\''+escA(type)+'\',\''+escA(name)+'\',\''+(type!=='dept'?escA(data[0]['部门']):'')+'\',\''+(type==='spu'?escA(data[0]['店铺']):'')+'\')" title="添加备注">💬</button>'+
+      '<button class="remark-btn'+(hasRk?' has-note':'')+'" onclick="openRemark(this,\''+esc(type)+'\',\''+esc(name)+'\',\''+(type!=='dept'?esc(data[0]['部门']):'')+'\',\''+(type==='spu'?esc(data[0]['店铺']):'')+'\')" title="添加备注">💬</button>'+
       '</td>'+
       '<td>'+
       (type==='dept'
-        ?'<button class="btn btn-xs" onclick="deleteDept(\''+escA(name)+'\')" title="删除部门" style="color:#e11d48">🗑️</button>'
+        ?'<button class="btn btn-xs" onclick="deleteDept(\''+esc(name)+'\')" title="删除部门" style="color:#e11d48">🗑️</button>'
         :type==='store'
-        ?'<button class="btn btn-xs" onclick="deleteStore(\''+escA(data[0]['部门'])+'\',\''+escA(name)+'\')" title="删除店铺" style="color:#e11d48">🗑️</button>'
-        :'<button class="btn btn-xs" onclick="deleteSPU(\''+escA(data[0]['部门'])+'\',\''+escA(data[0]['店铺'])+'\',\''+escA(name)+'\')" title="删除SPU" style="color:#e11d48">🗑️</button>')+
+        ?'<button class="btn btn-xs" onclick="deleteStore(\''+esc(data[0]['部门'])+'\',\''+esc(name)+'\')" title="删除店铺" style="color:#e11d48">🗑️</button>'
+        :'<button class="btn btn-xs" onclick="deleteSPU(\''+esc(data[0]['部门'])+'\',\''+esc(data[0]['店铺'])+'\',\''+esc(name)+'\')" title="删除SPU" style="color:#e11d48">🗑️</button>')+
       '</td>'+
     '</tr>';
   });
@@ -1346,7 +1346,6 @@ loadPredictCfg();
 var opLog=[];
 function logOp(action,detail){opLog.push({time:new Date().toLocaleString(),action:action,detail:detail});if(opLog.length>200)opLog.shift();try{syncSave("opLog",opLog);}catch(e){}try{refreshLog();}catch(e){}}
 try{var savedLog=localStorage.getItem("opLog");if(savedLog)opLog=JSON.parse(savedLog);}catch(e){}
-function saveLog(){try{syncSave("opLog",opLog);}catch(e){}}
 
 function saveData(){
   try{
@@ -1595,11 +1594,7 @@ function renderAlerts(alerts){
   // 拆分成断货和滞销两组
   var stockAlerts=allFiltered.filter(function(a){return a.type==='stockout';});
   var overAlerts=allFiltered.filter(function(a){return a.type==='overstock';});
-  var totalStock=alerts.filter(function(a){return a.type==='stockout';});
-  var totalOver=alerts.filter(function(a){return a.type==='overstock';});
-  var stockProcessedCount=totalStock.filter(function(a){return isAlertProcessed(a.sku._id,a.type);}).length;
-  var overProcessedCount=totalOver.filter(function(a){return isAlertProcessed(a.sku._id,a.type);}).length;
-  return renderStockPanel(stockAlerts,showProcessed,stockProcessedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed,overProcessedCount,totalOver.length);
+  return renderStockPanel(stockAlerts,showProcessed,processedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed);
 }
 
 function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
@@ -1626,9 +1621,6 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
   if(!showProcessed&&stockAlerts.length>0){
     h+=' <button class="btn btn-xs btn-pri" onclick="event.stopPropagation();generateROFromAlerts()" style="margin-left:6px;font-size:10px">📋 生成补货单('+checkedStockout+')</button>';
     h+=' <span style="font-size:9px;color:var(--text2);margin-left:4px;cursor:pointer" onclick="event.stopPropagation();toggleAllStockoutChecks()">'+(checkedStockout===stockAlerts.length?'取消全选':'全选断货')+'</span>';
-  }
-  if(showProcessed){
-    h+=' <button class="btn btn-xs btn-pri" onclick="event.stopPropagation();switchProcessedView(false)" style="margin-left:6px;font-size:10px">↩ 返回预警清单</button>';
   }
   h+='</div><div class="a-counts">';
   ['urgent','high','medium','low'].forEach(function(lv){if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+counts[lv]+' '+labels[lv]+'</span>';});
@@ -1681,7 +1673,7 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
   return h;
 }
 
-function renderOverPanel(overAlerts,showProcessed,processedCount,totalAlerts){
+function renderOverPanel(overAlerts,showProcessed){
   if(!overAlerts.length&&!showProcessed)return''; // 没有滞销预警时不显示
   var counts={urgent:0,high:0,medium:0,low:0};
   overAlerts.forEach(function(a){counts[a.level]++;});
@@ -1691,13 +1683,9 @@ function renderOverPanel(overAlerts,showProcessed,processedCount,totalAlerts){
 
   var h='<div class="alert-panel" style="margin-bottom:8px">';
   h+='<div class="alert-summary" style="border-left-color:#eab308;background:linear-gradient(135deg,#fefce8,#fff);cursor:pointer" onclick="var lst=this.nextElementSibling;lst.classList.toggle(\'open\');this.querySelector(\'.a-arrow\').textContent=lst.classList.contains(\'open\')?\'▼\':\'▶\';window._overOpen=lst.classList.contains(\'open\')">';
-  h+='<div class="a-title">🟡 滞销预警 <span style="font-weight:400;font-size:10px;color:var(--text2)">库存积压 / 长库龄风险</span>';
-  if(showProcessed){
-    h+=' <button class="btn btn-xs btn-pri" onclick="event.stopPropagation();switchProcessedView(false)" style="margin-left:6px;font-size:10px">↩ 返回预警清单</button>';
-  }
-  h+='</div><div class="a-counts">';
+  h+='<div class="a-title">🟡 滞销预警 <span style="font-weight:400;font-size:10px;color:var(--text2)">库存积压 / 长库龄风险</span></div>';
+  h+='<div class="a-counts">';
   ['urgent','high','medium','low'].forEach(function(lv){if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+counts[lv]+' '+labels[lv]+'</span>';});
-  if(!showProcessed&&processedCount>0)h+='<button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)" style="margin-left:6px;font-size:9px">📋 '+processedCount+'条已处理</button>';
   h+='<span class="a-arrow" style="color:var(--text2);margin-left:6px">▶</span>';
   h+='</div></div>';
 
@@ -2085,6 +2073,30 @@ function reviewRO(orderId,action){
 
   var auth=getAuth();
   updateReplenOrder(orderId,{status:action, _reviewed:Date.now(), _reviewer:auth?auth.isAdmin?'管理员':auth.dept:'', _reviewNote:reviewNote});
+
+  // ====== 审核通过时，自动更新库存 ======
+  if(action==='approved' && !order._inventoryUpdated){
+    var updatedCount = 0;
+    order.items.forEach(function(it){
+      if(!it.approvedQty || it.approvedQty <= 0) return;
+      var sku = skuData.find(function(r){return r._id === it.skuId;});
+      if(!sku) return;
+      // 国内现货减少，FBA在途增加
+      sku['国内现货'] = Math.max(0, (sku['国内现货']||0) - it.approvedQty);
+      sku['FBA在途数量'] = (sku['FBA在途数量']||0) + it.approvedQty;
+      calcDOS(sku);
+      sku._orig = JSON.parse(JSON.stringify(sku));
+      updatedCount++;
+    });
+    if(updatedCount > 0){
+      order._inventoryUpdated = true;
+      syncSave('skuData', skuData);
+      logOp('库存自动更新','补货单'+orderId+'通过: '+updatedCount+'个SKU, 国内现货→FBA在途');
+      console.log('📦 库存已自动更新: '+updatedCount+'个SKU, 国内现货减少→FBA在途增加');
+    }
+  }
+  // ====== 库存更新结束 ======
+
   saveReplenOrders();
   logOp((action==='approved'?'通过':'驳回')+'补货单',orderId);
   clsModal();
@@ -2178,7 +2190,7 @@ function filterSKUTable(type){
   if(dept)f=f.filter(function(r){return r["部门"]===dept;});
   if(store)f=f.filter(function(r){return r["店铺"]===store;});
   if(spu)f=f.filter(function(r){return r["spu"]===spu;});
-  if(type==="滞销"){f=f.filter(function(r){return (r["总DOS"]||0)>90;});}
+  if(type==="滞销"){f=f.filter(function(r){var d=r["在库+在途DOS_30d"]||r["FBA可售DOS"]||r["国内库存DOS"]||0;return d>90;});}
   else if(type==="断货"){f=f.filter(function(r){return ((r["FBA在库数量"]||0)+(r["fbm可售"]||0))<=0;});}
   else if(type==="长库龄"){f=f.filter(function(r){return (r["大于180天库存合计"]||0)>0;});}
   else if(type==="低DOS"){f=f.filter(function(r){var d=r["FBA可售DOS"]||r["国内库存DOS"]||0;return d>0&&d<7;});}
@@ -2400,7 +2412,7 @@ function importExcel(input){
   }
 
   var reader=new FileReader();
-  reader.onload=async function(e){
+  reader.onload=function(e){
     try{
       var wb=XLSX.read(e.target.result,{type:'array'});
       var ws=wb.Sheets[wb.SheetNames[0]];
@@ -2448,53 +2460,20 @@ function importExcel(input){
 
       if(newData.length===0){alert('未解析到有效数据行！');input.value='';return;}
 
-      // 判断当前用户身份：部门用户只检查自己部门的SKU去重，管理员全局检查
-      var auth0=getAuth();var isAdmin0=auth0&&auth0.isAdmin;var authDept0=auth0&&!isAdmin0?auth0.dept:null;
-
-      // 用 SKU+店铺+部门 作为唯一键来判断新旧
-      function importKey(r){return (r.SKU||'')+'|'+(r.店铺||'')+'|'+(r.部门||'');}
-
-      // Excel内部重复行统计（仅提示，不自动去重）
-      var excelKeys={};
-      newData.forEach(function(r){var k=importKey(r);excelKeys[k]=(excelKeys[k]||0)+1;});
-      var excelDupCount=0;
-      Object.values(excelKeys).forEach(function(v){if(v>1)excelDupCount+=v-1;});
-
       // Duplicate detection + preview
       var newSKUs=0,dupSKUs=0;
-      var existingSKUs={};
-      var checkData=isAdmin0?skuData:skuData.filter(function(r){return r['部门']===authDept0;});
-      checkData.forEach(function(r){existingSKUs[importKey(r)]=r;});
-      newData.forEach(function(r){if(existingSKUs[importKey(r)])dupSKUs++;else newSKUs++;});
-      var replaceLabel=isAdmin0?'全部替换':'全部替换【'+authDept0+'】';
-      var currentCount=isAdmin0?skuData.length:checkData.length;
-      var dupHint=excelDupCount>0?'  <span style="color:#e11d48">⚠️ Excel内有 '+excelDupCount+' 行SKU+店铺+部门重复，请检查</span>\n':'';
-      var choice=await customConfirm(
-        '📥 导入预览\n\n'+
-        '共 '+newData.length+' 条数据\n'+
-        dupHint+
-        '  📍 当前部门和店铺下\n'+
-        '  🆕 新增SKU: '+newSKUs+' 条\n'+
-        '  🔄 已有SKU: '+dupSKUs+' 条\n'+
-        '  📦 当前已有: '+currentCount+' 条\n'+
-        '  👤 当前身份: '+(isAdmin0?'管理员':authDept0)+'\n'+
-        '\n'+
-        '💡 对已有的 '+dupSKUs+' 条数据，请选择处理方式：',
-        replaceLabel,
-        '仅添加新增SKU'
-      );
+      var existingSKUs={};skuData.forEach(function(r){existingSKUs[r.SKU]=r;});
+      newData.forEach(function(r){if(existingSKUs[r.SKU])dupSKUs++;else newSKUs++;});
+      // 判断当前用户身份：部门用户只能覆盖自己部门，管理员可以全局替换
+      var auth0=getAuth();var isAdmin0=auth0&&auth0.isAdmin;var authDept0=auth0&&!isAdmin0?auth0.dept:null;
+      var replaceLabel=isAdmin0?'全部替换当前数据':'替换【'+authDept0+'】的旧数据（其他部门不受影响）';
+      var choice=confirm('📥 导入预览\n\n共 '+newData.length+' 条数据\n  🆕 新增: '+newSKUs+' 条\n  🔄 重复SKU: '+dupSKUs+' 条\n  📦 当前已有: '+skuData.length+' 条\n  👤 当前身份: '+(isAdmin0?'管理员':authDept0)+'\n\n点「确定」= '+replaceLabel+'\n点「取消」= 跳过重复SKU，仅导入新数据');
       if(!choice){
         // Skip duplicates
         var filteredNew=[];
-        newData.forEach(function(r){if(!existingSKUs[importKey(r)])filteredNew.push(r);});
+        newData.forEach(function(r){if(!existingSKUs[r.SKU])filteredNew.push(r);});
         if(filteredNew.length===0){alert('所有SKU均为重复，未导入任何数据。');input.value='';return;}
         newData=filteredNew;
-        // 部门用户：过滤掉非本部门数据
-        if(!isAdmin0){
-          var beforeCount=newData.length;
-          newData=newData.filter(function(r){return r['部门']===authDept0;});
-          if(newData.length<beforeCount)alert('⚠️ 已跳过 '+(beforeCount-newData.length)+' 条非【'+authDept0+'】的数据。');
-        }
       }
 
       // Merge data
@@ -2503,15 +2482,12 @@ function importExcel(input){
           // 管理员：全局替换
           skuData=newData;
         }else{
-          // 部门用户：只替换自己部门，过滤掉Excel中其他部门的数据
+          // 部门用户：只替换自己部门的SKU，保留其他部门数据
           var otherDepts=skuData.filter(function(r){return r['部门']!==authDept0;});
-          var myNewData=newData.filter(function(r){return r['部门']===authDept0;});
-          var skippedDepts=newData.length-myNewData.length;
-          if(skippedDepts>0)alert('⚠️ 已跳过 '+skippedDepts+' 条非【'+authDept0+'】的数据，其他部门数据不受影响。');
-          skuData=otherDepts.concat(myNewData);
+          skuData=otherDepts.concat(newData);
         }
       }else{
-        // Append new SKUs to existing data (all departments for admin, all for dept user too since "仅添加新增")
+        // Append new SKUs to existing data
         skuData=skuData.concat(newData);
       }
       skuData.forEach(function(r,i){
@@ -2524,7 +2500,7 @@ function importExcel(input){
 
       saveData();
       rebuildAll();
-      showToast('✅ 成功导入 '+newData.length+' 条，当前共 '+skuData.length+' 条SKU！');
+      showToast('✅ 成功导入 '+(choice?'':'新增')+newData.length+' 条，当前共 '+skuData.length+' 条SKU！');
     }catch(err){
       var detail='';
       if(err.message.indexOf('XLSX')>=0||err.message.indexOf('undefined')>=0){
@@ -2839,28 +2815,9 @@ document.addEventListener('DOMContentLoaded',async function(){
 // ============================================================
 // UTILS
 // ============================================================
-// 自定义确认框：支持自定义按钮文字，替代原生 confirm
-function customConfirm(msg,btnOk,btnCancel){
-  return new Promise(function(resolve){
-    var ov=document.createElement('div');ov.className='modal-overlay';ov.id='customConfirmOverlay';
-    ov.style.cssText='display:flex;z-index:60';
-    ov.innerHTML='<div class="modal" style="width:420px;text-align:center;padding:24px">'+
-      '<div style="font-size:13px;white-space:pre-line;margin-bottom:18px;line-height:1.6">'+msg+'</div>'+
-      '<div class="f-acts" style="justify-content:center;gap:10px">'+
-      '<button class="btn" id="customConfirmCancel" style="padding:8px 24px;font-size:12px;border-radius:6px">'+esc(btnCancel||'取消')+'</button>'+
-      '<button class="btn btn-pri" id="customConfirmOk" style="padding:8px 24px;font-size:12px;border-radius:6px">'+esc(btnOk||'确定')+'</button>'+
-      '</div></div>';
-    document.body.appendChild(ov);
-    document.getElementById('customConfirmOk').onclick=function(){ov.remove();resolve(true);};
-    document.getElementById('customConfirmCancel').onclick=function(){ov.remove();resolve(false);};
-    ov.addEventListener('click',function(e){if(e.target===ov){ov.remove();resolve(false);}});
-  });
-}
 function fmt(n){if(n===null||n===undefined||isNaN(n))return'0';return Number(n).toLocaleString('zh-CN',{maximumFractionDigits:1});}
 function fmtM(n){if(n===null||n===undefined||isNaN(n))return'$0';return'$'+Number(n).toLocaleString('zh-CN',{maximumFractionDigits:0});}
-function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-// JS字符串内嵌到HTML属性中（如onclick），需要额外转义单引号和反斜杠
-function escA(s){if(!s)return'';return esc(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.className='toast ok';t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},2500);}
 </script>
 
