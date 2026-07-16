@@ -263,6 +263,7 @@ tbody tr:hover{background:#f8fafc}
       <button class="btn-login" onclick="doLogin()">🔓 解锁</button>
       <button class="btn-admin" onclick="doAdminLogin()">👑 管理员</button>
     </div>
+    <div id="fireStatusLogin" style="text-align:center;font-size:10px;padding:8px 0 0;color:#64748b">🟡 连接中...</div>
   </div>
 </div>
 
@@ -314,8 +315,11 @@ var _fsQueue = [];            // 待保存队列
 var _fsTimer = null;          // 防抖定时器
 var _fireAvailable = false;   // Firebase SDK 是否可用
 function updateFireStatus(color,text,title){
-  var el=document.getElementById('fireStatus');
-  if(el){el.innerHTML=text;el.style.background=color==='green'?'#d1fae5':color==='red'?'#fee2e2':color==='yellow'?'#fef3c7':'#f3f4f6';el.title=title||'';}
+  var bg=color==='green'?'#d1fae5':color==='red'?'#fee2e2':color==='yellow'?'#fef3c7':'#f3f4f6';
+  var el1=document.getElementById('fireStatus');
+  if(el1){el1.innerHTML=text;el1.style.background=bg;el1.title=title||'';}
+  var el2=document.getElementById('fireStatusLogin');
+  if(el2){el2.innerHTML=text;el2.style.background=bg;el2.title=title||'';}
 }
 
 // 安全初始化 Firebase（SDK 可能加载失败）
