@@ -278,6 +278,7 @@ tbody tr:hover{background:#f8fafc}
   <div class="topbar">
     <div class="breadcrumb" id="breadcrumb">📋 <span>部门总览</span></div>
     <span class="auth-badge" id="authBadge"></span>
+    <span id="fireStatus" style="font-size:10px;padding:3px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:4px" title="Firebase 云端连接状态">🟡 连接中</span>
     <input class="search-box" id="searchInput" placeholder="🔍 搜索SKU/SPU/品名..." />
     <div class="actions">
       <button class="btn" onclick="openChangePwd()">🔑 改密</button>
@@ -312,6 +313,10 @@ var _fireUnsub = null;        // onSnapshot 取消订阅函数
 var _fsQueue = [];            // 待保存队列
 var _fsTimer = null;          // 防抖定时器
 var _fireAvailable = false;   // Firebase SDK 是否可用
+function updateFireStatus(color,text,title){
+  var el=document.getElementById('fireStatus');
+  if(el){el.innerHTML=text;el.style.background=color==='green'?'#d1fae5':color==='red'?'#fee2e2':color==='yellow'?'#fef3c7':'#f3f4f6';el.title=title||'';}
+}
 
 // 安全初始化 Firebase（SDK 可能加载失败）
 if(typeof firebase !== 'undefined'){
@@ -334,14 +339,17 @@ if(typeof firebase !== 'undefined'){
       else if(err.code==='unimplemented'){console.warn('Firestore 离线缓存: 浏览器不支持');}
     });
     console.log('🔥 Firebase SDK 初始化成功');
+    updateFireStatus('yellow','🟡 连接中','正在连接云端...');
   }catch(e){
     console.warn('⚠️ Firebase 初始化失败:', e.message);
     _fireAvailable = false;
     _fireReady = true;
+    updateFireStatus('red','🔴 离线','Firebase 初始化失败: '+e.message);
   }
 }else{
   console.warn('⚠️ Firebase SDK 未加载（可能网络受限），使用本地存储模式');
   _fireReady = true;
+  updateFireStatus('red','🔴 离线','Firebase SDK 无法加载，数据仅存本地。请检查是否能访问 gstatic.com');
 }
 
 // 启动：匿名登录 + 监听 Firestore 实时数据
@@ -355,6 +363,7 @@ function fireInit(){
   return new Promise(function(resolve){
     auth.signInAnonymously().then(function(){
       console.log('🔥 Firebase 匿名登录成功');
+      updateFireStatus('yellow','🟡 加载中','已连接云端，正在加载数据...');
       var firstCall = true;
       // 实时监听云端数据变化
       _fireUnsub = db.collection('sharedData').doc('main').onSnapshot(function(doc){
@@ -362,6 +371,7 @@ function fireInit(){
           console.log('📡 云端尚无数据，将使用本地数据初始化');
           _fireReady = true;
           _fireData = {};
+          updateFireStatus('yellow','🟡 无数据','云端暂无数据，请在电脑端导入数据后点击保存');
           if(firstCall){ firstCall = false; resolve(); }
           return;
         }
@@ -382,6 +392,7 @@ function fireInit(){
           });
           console.log('📡 已从云端加载数据: '+count+'/'+keys.length+' 项, '+(serverData.skuData||[]).length+' SKU, '+(serverData.replenOrders||[]).length+' 补货单');
           _fireReady = true;
+          updateFireStatus('green','🟢 在线('+(serverData.skuData||[]).length+'条)','云端数据已同步，多设备共享正常');
           if(firstCall){ firstCall = false; resolve(); }
         }else if(!_fireSaveBusy && (Date.now() - _fireLastSave) > 3000){
           // 外部变更（其他用户/标签页修改了数据）：更新 localStorage
@@ -400,11 +411,13 @@ function fireInit(){
       }, function(err){
         console.warn('⚠️ Firestore 监听失败，降级到本地存储:', err.message);
         _fireReady = true;
+        updateFireStatus('red','🔴 读取失败','无法读取云端数据: '+err.message);
         if(firstCall){ firstCall = false; resolve(); }
       });
     }).catch(function(err){
       console.warn('⚠️ Firebase 匿名登录失败，降级到本地存储模式:', err.message);
       _fireReady = true;
+      updateFireStatus('red','🔴 登录失败','匿名登录失败，数据仅存本地');
       resolve();
     });
   });
@@ -2864,6 +2877,7 @@ document.addEventListener('DOMContentLoaded',async function(){
     console.warn('⚠️ Firebase SDK未加载！将使用本地存储模式。');
     _fireAvailable = false;
     _fireReady = true;
+    updateFireStatus('red','🔴 离线','Firebase SDK 加载失败(gstatic.com 可能被墙)。数据仅存本机，无法多设备共享。');
   }
   await fireInit(); // 从 Firestore 加载云端共享数据（不可用时立即返回）
   loadData();
