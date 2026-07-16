@@ -1594,17 +1594,20 @@ function renderAlerts(alerts){
   var allFiltered=showProcessed
     ?alerts.filter(function(a){return isAlertProcessed(a.sku._id,a.type);})
     :alerts.filter(function(a){return !isAlertProcessed(a.sku._id,a.type);});
-  var processedCount=alerts.length-allFiltered.filter(function(a){return !isAlertProcessed(a.sku._id,a.type);}).length;
+  // 按类型分别统计已处理数
+  var stockProcessed=alerts.filter(function(a){return a.type==='stockout'&&isAlertProcessed(a.sku._id,a.type);}).length;
+  var overProcessed=alerts.filter(function(a){return a.type==='overstock'&&isAlertProcessed(a.sku._id,a.type);}).length;
+  var totalProcessed=stockProcessed+overProcessed;
   if(!allFiltered.length&&!showProcessed){
-    return '<div class="alert-panel"><div class="alert-summary" style="border-left-color:#10b981;background:linear-gradient(135deg,#f0fdf4,#fff);cursor:default"><div class="a-title">✅ 所有预警已处理</div><div class="a-counts">'+(processedCount>0?'<span style="font-size:10px;color:var(--text2)">'+processedCount+'条已处理</span> ':'')+'<button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)">📋 查看已处理</button></div></div></div>';
+    return '<div class="alert-panel"><div class="alert-summary" style="border-left-color:#10b981;background:linear-gradient(135deg,#f0fdf4,#fff);cursor:default"><div class="a-title">✅ 所有预警已处理</div><div class="a-counts">'+'<span style="font-size:10px;color:var(--text2)">断货'+stockProcessed+'条 滞销'+overProcessed+'条</span> <button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)">📋 查看已处理</button></div></div></div>';
   }
   // 拆分成断货和滞销两组
   var stockAlerts=allFiltered.filter(function(a){return a.type==='stockout';});
   var overAlerts=allFiltered.filter(function(a){return a.type==='overstock';});
-  return renderStockPanel(stockAlerts,showProcessed,processedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed,processedCount);
+  return renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed,totalProcessed)+renderOverPanel(overAlerts,showProcessed,stockProcessed,overProcessed,totalProcessed);
 }
 
-function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
+function renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed,totalProcessed){
   if(!stockAlerts.length&&!showProcessed)return''; // 没有断货预警时不显示
   var counts={urgent:0,high:0,medium:0,low:0};
   stockAlerts.forEach(function(a){counts[a.level]++;});
@@ -1612,7 +1615,7 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
   var priCls={urgent:'pri-urgent',high:'pri-high',medium:'pri-medium',low:'pri-low'};
   var lvCls={urgent:'lv-urgent',high:'lv-high',medium:'lv-medium',low:'lv-low'};
 
-  // 断货默认全勾选
+  // 断货默认全勾选（仅在未处理视图）
   if(!showProcessed){
     stockAlerts.forEach(function(a){
       var ck=alertCheckKey(a.sku._id,a.type);
@@ -1625,13 +1628,16 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
   // Summary bar
   h+='<div class="alert-summary" style="border-left-color:#dc2626;background:linear-gradient(135deg,#fef2f2,#fff);cursor:pointer" onclick="var lst=this.nextElementSibling;var wasOpen=lst.classList.contains(\'open\');lst.classList.toggle(\'open\');this.querySelector(\'.a-arrow\').textContent=lst.classList.contains(\'open\')?\'▼\':\'▶\';window._stockOpen=lst.classList.contains(\'open\')">';
   h+='<div class="a-title">🔴 断货预警 <span style="font-weight:400;font-size:10px;color:var(--text2)">可售库存不足</span>';
-  if(!showProcessed&&stockAlerts.length>0){
+  if(showProcessed){
+    h+=' <button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(false)" style="margin-left:6px;font-size:10px;color:#2563eb;border-color:#bfdbfe">🔙 返回未处理</button>';
+  }else if(stockAlerts.length>0){
     h+=' <button class="btn btn-xs btn-pri" onclick="event.stopPropagation();generateROFromAlerts()" style="margin-left:6px;font-size:10px">📋 生成补货单('+checkedStockout+')</button>';
     h+=' <span style="font-size:9px;color:var(--text2);margin-left:4px;cursor:pointer" onclick="event.stopPropagation();toggleAllStockoutChecks()">'+(checkedStockout===stockAlerts.length?'取消全选':'全选断货')+'</span>';
   }
   h+='</div><div class="a-counts">';
   ['urgent','high','medium','low'].forEach(function(lv){if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+counts[lv]+' '+labels[lv]+'</span>';});
-  if(!showProcessed&&processedCount>0)h+='<button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)" style="margin-left:6px;font-size:9px">📋 '+processedCount+'条已处理</button>';
+  if(!showProcessed&&stockProcessed>0)h+='<button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)" style="margin-left:6px;font-size:9px">📋 断货'+stockProcessed+'条已处理</button>';
+  if(showProcessed)h+='<span style="font-size:9px;color:var(--text2);margin-left:4px">'+stockAlerts.length+'条已处理</span>';
   h+='<span class="a-arrow" style="color:var(--text2);margin-left:6px">▶</span>';
   h+='</div></div>';
 
@@ -1680,7 +1686,7 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
   return h;
 }
 
-function renderOverPanel(overAlerts,showProcessed,processedCount){
+function renderOverPanel(overAlerts,showProcessed,stockProcessed,overProcessed,totalProcessed){
   // 始终显示滞销预警板块，无预警时显示"暂无"
   var counts={urgent:0,high:0,medium:0,low:0};
   overAlerts.forEach(function(a){counts[a.level]++;});
@@ -1690,10 +1696,14 @@ function renderOverPanel(overAlerts,showProcessed,processedCount){
 
   var h='<div class="alert-panel" style="margin-bottom:8px">';
   h+='<div class="alert-summary" style="border-left-color:#eab308;background:linear-gradient(135deg,#fefce8,#fff);cursor:pointer" onclick="var lst=this.nextElementSibling;lst.classList.toggle(\'open\');this.querySelector(\'.a-arrow\').textContent=lst.classList.contains(\'open\')?\'▼\':\'▶\';window._overOpen=lst.classList.contains(\'open\')">';
-  h+='<div class="a-title">🟡 滞销预警 <span style="font-weight:400;font-size:10px;color:var(--text2)">库存积压 / 长库龄风险</span></div>';
-  h+='<div class="a-counts">';
+  h+='<div class="a-title">🟡 滞销预警 <span style="font-weight:400;font-size:10px;color:var(--text2)">库存积压 / 长库龄风险</span>';
+  if(showProcessed){
+    h+=' <button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(false)" style="margin-left:6px;font-size:10px;color:#2563eb;border-color:#bfdbfe">🔙 返回未处理</button>';
+  }
+  h+='</div><div class="a-counts">';
   ['urgent','high','medium','low'].forEach(function(lv){if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+counts[lv]+' '+labels[lv]+'</span>';});
-  if(!showProcessed&&processedCount>0)h+='<button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)" style="margin-left:4px;font-size:9px">📋 '+processedCount+'条已处理</button>';
+  if(!showProcessed&&overProcessed>0)h+='<button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)" style="margin-left:4px;font-size:9px">📋 滞销'+overProcessed+'条已处理</button>';
+  if(showProcessed)h+='<span style="font-size:9px;color:var(--text2);margin-left:4px">'+overAlerts.length+'条已处理</span>';
   h+='<span class="a-arrow" style="color:var(--text2);margin-left:6px">▶</span>';
   h+='</div></div>';
 
