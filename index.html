@@ -1643,7 +1643,8 @@ function renderAlerts(alerts){
 }
 
 function renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed,totalProcessed){
-  if(!stockAlerts.length&&!showProcessed)return''; // 没有断货预警时不显示
+  // 未处理视图且没有任何断货预警（含已处理）时才不显示
+  if(!stockAlerts.length&&!showProcessed&&!stockProcessed)return'';
   var counts={urgent:0,high:0,medium:0,low:0};
   stockAlerts.forEach(function(a){counts[a.level]++;});
   var labels={urgent:'紧急',high:'高风险',medium:'中风险',low:'关注'};
@@ -1692,7 +1693,11 @@ function renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed
 
   h+='<div style="min-width:658px">';
   if(!stockAlerts.length){
-    h+='<div style="padding:16px;text-align:center;color:var(--text2);font-size:11px">✅ 暂无断货预警</div>';
+    if(stockProcessed>0){
+      h+='<div style="padding:16px;text-align:center;color:var(--text2);font-size:11px">📋 全部断货预警已处理（'+stockProcessed+'条）— <a href="javascript:void(0)" onclick="switchProcessedView(true)" style="color:#3b82f6">点击查看</a></div>';
+    }else{
+      h+='<div style="padding:16px;text-align:center;color:var(--text2);font-size:11px">✅ 暂无断货预警</div>';
+    }
   }else{
     stockAlerts.forEach(function(a){
       var isDone=isAlertProcessed(a.sku._id,a.type);
