@@ -1609,14 +1609,30 @@ function switchProcessedView(show){
   window._stockOpen=true;window._overOpen=true;
   refresh();
 }
-// 勾选状态: key="skuId|type" → true/false. 断货默认全选，滞销默认不选.
-// 持久化到 localStorage 防止页面刷新丢失
-window._alertChecks=window._alertChecks||{};
-try{var _savedChecks=localStorage.getItem('_alertChecks');if(_savedChecks){var _parsed=JSON.parse(_savedChecks);for(var _k in _parsed)window._alertChecks[_k]=_parsed[_k];}}catch(e){}
-function saveAlertChecks(){try{localStorage.setItem('_alertChecks',JSON.stringify(window._alertChecks));}catch(e){}}
+// 勾选状态 — 断货默认全选，只记录「被取消勾选」的SKU
+// _uncheckedStockout: {"skuId|stockout": true} 表示该SKU被手动取消勾选
+window._uncheckedStockout = window._uncheckedStockout || {};
+(function(){
+  try{var s=localStorage.getItem('_uncheckedStockout');if(s){var d=JSON.parse(s);for(var k in d)window._uncheckedStockout[k]=d[k];}}catch(e){}
+})();
+function saveUnchecked(){try{localStorage.setItem('_uncheckedStockout',JSON.stringify(window._uncheckedStockout));}catch(e){}}
 function alertCheckKey(skuId,type){return skuId+'|'+type;}
-function isAlertChecked(skuId,type){return !!window._alertChecks[alertCheckKey(skuId,type)];}
-function setAlertCheck(skuId,type,val){window._alertChecks[alertCheckKey(skuId,type)]=val;saveAlertChecks();}
+// 断货：默认选中，除非在 _uncheckedStockout 中
+// 滞销：始终返回 false（滞销用已处理标记，不用勾选）
+function isAlertChecked(skuId,type){
+  if(type==='overstock')return false;
+  return !window._uncheckedStockout[alertCheckKey(skuId,type)];
+}
+function setAlertCheck(skuId,type,val){
+  var key=alertCheckKey(skuId,type);
+  if(val){delete window._uncheckedStockout[key];}else{window._uncheckedStockout[key]=true;}
+  saveUnchecked();
+}
+function toggleAlertCheckDirect(skuId,type){
+  var key=alertCheckKey(skuId,type);
+  if(window._uncheckedStockout[key]){delete window._uncheckedStockout[key];}else{window._uncheckedStockout[key]=true;}
+  saveUnchecked();
+}
 function countCheckedStockout(filteredAlerts){
   var n=0;
   filteredAlerts.forEach(function(a){if(a.type==='stockout'&&isAlertChecked(a.sku._id,'stockout'))n++;});
@@ -1651,13 +1667,6 @@ function renderStockPanel(stockAlerts,showProcessed,stockProcessed,overProcessed
   var priCls={urgent:'pri-urgent',high:'pri-high',medium:'pri-medium',low:'pri-low'};
   var lvCls={urgent:'lv-urgent',high:'lv-high',medium:'lv-medium',low:'lv-low'};
 
-  // 断货默认全勾选（仅在未处理视图）
-  if(!showProcessed){
-    stockAlerts.forEach(function(a){
-      var ck=alertCheckKey(a.sku._id,a.type);
-      if(!(ck in window._alertChecks))window._alertChecks[ck]=true;
-    });
-  }
   var checkedStockout=countCheckedStockout(stockAlerts);
 
   var h='<div class="alert-panel" style="margin-bottom:8px">';
@@ -1796,10 +1805,7 @@ function renderOverPanel(overAlerts,showProcessed,stockProcessed,overProcessed,t
 }
 
 function toggleAlertCheck(skuId,type){
-  var ck=alertCheckKey(skuId,type);
-  window._alertChecks[ck]=!window._alertChecks[ck];
-  saveAlertChecks();
-  // 保持面板展开状态
+  toggleAlertCheckDirect(skuId,type);
   var sp=document.querySelector('.alert-list.open');
   window._stockOpen=!!sp;
   refresh();
@@ -1809,9 +1815,16 @@ function toggleAllStockoutChecks(){
   var stockAlerts=alerts.filter(function(a){return a.type==='stockout'&&!isAlertProcessed(a.sku._id,a.type);});
   if(!stockAlerts.length)return;
   var anyUnchecked=stockAlerts.some(function(a){return !isAlertChecked(a.sku._id,'stockout');});
-  stockAlerts.forEach(function(a){setAlertCheck(a.sku._id,'stockout',anyUnchecked);});
-  saveAlertChecks();
-  // 保持面板状态
+  // anyUnchecked=true 表示存在未勾选的 → 全选（清空 _uncheckedStockout）
+  // anyUnchecked=false 表示全部已勾选 → 全不选（全部加入 _uncheckedStockout）
+  if(anyUnchecked){
+    // 全选：清空所有 stockout 的取消标记
+    stockAlerts.forEach(function(a){delete window._uncheckedStockout[alertCheckKey(a.sku._id,'stockout')];});
+  }else{
+    // 全不选：标记全部为取消
+    stockAlerts.forEach(function(a){window._uncheckedStockout[alertCheckKey(a.sku._id,'stockout')]=true;});
+  }
+  saveUnchecked();
   var sp=document.querySelector('.alert-list.open');
   window._stockOpen=!!sp;
   refresh();
@@ -2751,8 +2764,8 @@ function deleteDept(dept){
 
 function rebuildAll(){
   // Re-assign IDs — 同时清除旧的复选框状态（因为 _id 变了）
-  window._alertChecks = {};
-  saveAlertChecks();
+  window._uncheckedStockout = {};
+  saveUnchecked();
   skuData.forEach(function(r,i){r._id=i;});
   // Sync new departments to password store
   loadPasswords();
