@@ -11,13 +11,7 @@
 // XLSX CDN 备用加载 — 主CDN失败时自动切换
 if(typeof XLSX==='undefined'){document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>');}
 </script>
-<!-- Firebase SDK — 本地托管（国内可访问），Google CDN备用 -->
-<script src="firebase-app.js"></script>
-<script>if(typeof firebase==='undefined'){document.write('<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"><\/script>');}</script>
-<script src="firebase-auth.js"></script>
-<script>if(typeof firebase==='undefined'||!firebase.auth){document.write('<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"><\/script>');}</script>
-<script src="firebase-firestore.js"></script>
-<script>if(typeof firebase==='undefined'||!firebase.firestore){document.write('<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"><\/script>');}</script>
+<!-- 服务端同步：通过 Express API 共享数据 -->
 <style>
 :root{
   --bg:#f1f5f9;--card:#fff;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;
@@ -266,7 +260,6 @@ tbody tr:hover{background:#f8fafc}
       <button class="btn-login" onclick="doLogin()">🔓 解锁</button>
       <button class="btn-admin" onclick="doAdminLogin()">👑 管理员</button>
     </div>
-    <div id="fireStatusLogin" style="text-align:center;font-size:10px;padding:8px 0 0;color:#64748b">🟡 连接中...</div>
   </div>
 </div>
 
@@ -282,7 +275,6 @@ tbody tr:hover{background:#f8fafc}
   <div class="topbar">
     <div class="breadcrumb" id="breadcrumb">📋 <span>部门总览</span></div>
     <span class="auth-badge" id="authBadge"></span>
-    <span id="fireStatus" style="font-size:10px;padding:4px 10px;border-radius:10px;display:inline-flex;align-items:center;gap:4px;border:1.5px solid #e2e8f0;font-weight:600" title="Firebase 云端连接状态">🟡 连接中</span>
     <input class="search-box" id="searchInput" placeholder="🔍 搜索SKU/SPU/品名..." />
     <div class="actions">
       <button class="btn" onclick="openChangePwd()">🔑 改密</button>
@@ -306,209 +298,82 @@ tbody tr:hover{background:#f8fafc}
 
 <script>
 // ============================================================
-// 🔥 FIREBASE + FIRESTORE 数据同步层（多用户云端共享）
-// 如果 Firebase SDK 加载失败，自动降级到纯 localStorage
+// 🔗 Express 服务端同步层（多用户数据共享）
+// 部署到 Railway 后，改为 Railway 地址即可
 // ============================================================
-var _fireReady = false;       // Firestore 是否已就绪
-var _fireData = {};           // 云端数据内存镜像
-var _fireSaveBusy = false;    // 防止保存时循环触发
-var _fireLastSave = 0;        // 上次保存时间戳，用于冷却期
-var _fireUnsub = null;        // onSnapshot 取消订阅函数
-var _fsQueue = [];            // 待保存队列
-var _fsTimer = null;          // 防抖定时器
-var _fireAvailable = false;   // Firebase SDK 是否可用
-function updateFireStatus(color,text,title){
-  var bg=color==='green'?'#d1fae5':color==='red'?'#fee2e2':color==='yellow'?'#fef3c7':'#f3f4f6';
-  var el1=document.getElementById('fireStatus');
-  if(el1){el1.innerHTML=text;el1.style.background=bg;el1.title=title||'';}
-  var el2=document.getElementById('fireStatusLogin');
-  if(el2){el2.innerHTML=text;el2.style.background=bg;el2.title=title||'';}
-}
-
-// 安全初始化 Firebase（SDK 可能加载失败）
-if(typeof firebase !== 'undefined'){
-  try{
-    firebase.initializeApp({
-      apiKey: "AIzaSyDxqco0KRAQwwLmFr9GLSJiAaFaRqi2sIU",
-      authDomain: "inventory-report-10954.firebaseapp.com",
-      projectId: "inventory-report-10954",
-      storageBucket: "inventory-report-10954.firebasestorage.app",
-      messagingSenderId: "1045025220928",
-      appId: "1:1045025220928:web:22bb2f8eabc02ba1f032a5"
-    });
-    var db = firebase.firestore();
-    var auth = firebase.auth();
-    _fireAvailable = true;
-
-    // 防止 Firestore 离线缓存无限增长
-    db.enablePersistence({synchronizeTabs:true}).catch(function(err){
-      if(err.code==='failed-precondition'){console.warn('Firestore 离线缓存: 多标签页已启用');}
-      else if(err.code==='unimplemented'){console.warn('Firestore 离线缓存: 浏览器不支持');}
-    });
-    console.log('🔥 Firebase SDK 初始化成功');
-    updateFireStatus('yellow','🟡 连接中','正在连接云端...');
-  }catch(e){
-    console.warn('⚠️ Firebase 初始化失败:', e.message);
-    _fireAvailable = false;
-    _fireReady = true;
-    updateFireStatus('red','🔴 离线','Firebase 初始化失败: '+e.message);
+var SYNC_URL = (function(){
+  // 🔧 部署到 Railway 后，把下面的地址改成你的 Railway URL
+  var RAILWAY_URL = '';
+  if(RAILWAY_URL) return RAILWAY_URL;
+  // 本地开发时自动连接本地 Express
+  if(window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1'){
+    return window.location.protocol+'//'+window.location.host+(window.location.port?':'+window.location.port:'');
   }
-}else{
-  console.warn('⚠️ Firebase SDK 未加载（可能网络受限），使用本地存储模式');
-  _fireReady = true;
-  updateFireStatus('red','🔴 离线','Firebase SDK 无法加载，数据仅存本地。请检查是否能访问 gstatic.com');
-}
+  return null; // 未配置 Railway URL 时使用本地存储
+})();
 
-// 启动：匿名登录 + 监听 Firestore 实时数据
-// 返回 Promise，首次数据加载完成后 resolve
-function fireInit(){
-  if(!_fireAvailable){
-    console.log('📦 本地存储模式（Firebase 不可用）');
-    _fireReady = true;
-    return Promise.resolve();
-  }
-  return new Promise(function(resolve){
-    var resolved=false;
-    // 10秒超时：如果 Firebase Auth 连不上（国内被墙），自动降级
-    var timeout=setTimeout(function(){
-      if(!resolved){resolved=true;
-        console.warn('⚠️ Firebase 登录超时，降级到本地存储');
-        _fireReady=true;
-        updateFireStatus('red','🔴 超时','无法连接 Firebase（可能被墙），数据仅存本地');
-        resolve();
-      }
-    },10000);
-    auth.signInAnonymously().then(function(){
-      if(resolved)return;
-      console.log('🔥 Firebase 匿名登录成功');
-      updateFireStatus('yellow','🟡 加载中','已连接云端，正在加载数据...');
-      var firstCall = true;
-      // 实时监听云端数据变化
-      _fireUnsub = db.collection('sharedData').doc('main').onSnapshot(function(doc){
-        if(!doc.exists){
-          if(!resolved){resolved=true;clearTimeout(timeout);}
-          console.log('📡 云端尚无数据，将使用本地数据初始化');
-          _fireReady = true;
-          _fireData = {};
-          updateFireStatus('yellow','🟡 无数据','云端暂无数据，请在电脑端导入数据后点击保存');
-          if(firstCall){ firstCall = false; resolve(); }
-          return;
-        }
-        var serverData = doc.data();
-        // 去掉元数据字段
-        delete serverData._updatedAt;
-        _fireData = serverData;
+var _syncQueue=[];
+var _syncTimer=null;
 
-        if(!_fireReady){
-          if(!resolved){resolved=true;clearTimeout(timeout);}
-          // 首次加载：用云端数据覆盖 localStorage
-          var keys = ['skuData','replenOrders','deptPasswords','adminPwd','healthCfg','alertCfg','predictCfg','processedAlerts','opLog','aggRemarks'];
-          var count = 0;
-          keys.forEach(function(k){
-            if(serverData[k] !== undefined){
-              localStorage.setItem(k, JSON.stringify(serverData[k]));
-              count++;
-            }
-          });
-          console.log('📡 已从云端加载数据: '+count+'/'+keys.length+' 项, '+(serverData.skuData||[]).length+' SKU, '+(serverData.replenOrders||[]).length+' 补货单');
-          _fireReady = true;
-          updateFireStatus('green','🟢 在线('+(serverData.skuData||[]).length+'条)','云端数据已同步，多设备共享正常');
-          if(firstCall){ firstCall = false; resolve(); }
-        }else if(!_fireSaveBusy && (Date.now() - _fireLastSave) > 3000){
-          // 外部变更（其他用户/标签页修改了数据）：更新 localStorage
-          // 冷却期 3 秒内跳过，防止自己的写入触发回执刷新
-          Object.keys(serverData).forEach(function(k){
-            if(serverData[k] !== undefined){
-              localStorage.setItem(k, JSON.stringify(serverData[k]));
-            }
-          });
-          console.log('📡 检测到云端数据更新，已同步到本地');
-          // 静默刷新内存变量和界面
-          reloadFromStorage();
-          refresh();
-          initNav();
-        }
-      }, function(err){
-        if(!resolved){resolved=true;clearTimeout(timeout);}
-        console.warn('⚠️ Firestore 监听失败，降级到本地存储:', err.message);
-        _fireReady = true;
-        updateFireStatus('red','🔴 读取失败','无法读取云端数据: '+err.message);
-        if(firstCall){ firstCall = false; resolve(); }
-      });
-    }).catch(function(err){
-      if(!resolved){resolved=true;clearTimeout(timeout);}
-      console.warn('⚠️ Firebase 匿名登录失败，降级到本地存储模式:', err.message);
-      _fireReady = true;
-      updateFireStatus('red','🔴 登录失败','匿名登录失败，数据仅存本地');
-      resolve();
-    });
-  });
-}
-
-// 从 localStorage 重新加载内存变量（Firestore 外部更新时调用）
-// ⚠️ 必须给 skuData 重新分配 _id，否则复选框 key 全变成 "undefined|stockout"
-// ⚠️ 外部数据变更时清理 processedAlerts，防止旧 ID 串到新 SKU 上
-function reloadFromStorage(){
-  var oldLen=skuData.length;
-  try{var d=localStorage.getItem('skuData');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed)){skuData=parsed;skuData.forEach(function(r,i){r._id=i;});}}}catch(e){}
-  if(skuData.length !== oldLen){processedAlerts={};saveProcessedAlerts();}
-  try{var d=localStorage.getItem('replenOrders');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))replenOrders=parsed;}}catch(e){}
-  try{var d=localStorage.getItem('deptPasswords');if(d)_deptPwdsCache=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('healthCfg');if(d)healthCfg=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('alertCfg');if(d)alertCfg=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('predictCfg');if(d)predictCfg=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('processedAlerts');if(d){var parsed=JSON.parse(d);if(parsed&&typeof parsed==='object')processedAlerts=parsed;}}catch(e){}
-  try{var d=localStorage.getItem('opLog');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))opLog=parsed;}}catch(e){}
-  try{var d=localStorage.getItem('aggRemarks');if(d){var parsed=JSON.parse(d);if(parsed&&typeof parsed==='object')aggRemarks=parsed;}}catch(e){}
-}
-
-// 保存单个 key 到 localStorage + Firestore
-function syncSave(key, value){
+function syncSave(key,value){
   localStorage.setItem(key, JSON.stringify(value));
-  if(!_fireAvailable || !_fireReady) return;
-  // 防抖：同一 key 的多次保存合并
-  _fsQueue = _fsQueue.filter(function(item){return item.key !== key;});
-  _fsQueue.push({key: key, value: value});
-  clearTimeout(_fsTimer);
-  _fsTimer = setTimeout(flushFirestore, 500);
+  if(!SYNC_URL)return;
+  _syncQueue = _syncQueue.filter(function(item){return item.key!==key;});
+  _syncQueue.push({key:key, value:value});
+  clearTimeout(_syncTimer);
+  _syncTimer=setTimeout(flushSync, 500);
 }
 
-// 批量写入 Firestore
-function flushFirestore(){
-  if(!_fsQueue.length || !_fireAvailable || !_fireReady) return;
-  var batch = {};
-  _fsQueue.forEach(function(item){ batch[item.key] = item.value; });
-  _fsQueue = [];
-  batch._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-  _fireSaveBusy = true;
-  _fireLastSave = Date.now();
-  db.collection('sharedData').doc('main').set(batch, {merge: true})
-    .then(function(){
-      _fireSaveBusy = false;
-      console.log('☁️ 已同步到云端: '+Object.keys(batch).filter(function(k){return k!=='_updatedAt';}).join(', '));
-    })
-    .catch(function(e){
-      _fireSaveBusy = false;
-      console.warn('⚠️ Firestore 写入失败:', e.message);
-    });
+function flushSync(){
+  if(!_syncQueue.length||!SYNC_URL)return;
+  var batch={};
+  _syncQueue.forEach(function(item){batch[item.key]=item.value;});
+  _syncQueue=[];
+  fetch(SYNC_URL+'/api/batch',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(batch)
+  }).then(function(){console.log('☁️ 已同步到服务器')})
+    .catch(function(e){console.warn('同步失败:',e.message);});
 }
 
-// 页面关闭前确保写入
-window.addEventListener('beforeunload', function(){
-  if(_fsQueue.length && _fireAvailable && _fireReady){
-    var batch = {};
-    _fsQueue.forEach(function(item){ batch[item.key] = item.value; });
-    _fsQueue = [];
-    db.collection('sharedData').doc('main').set(batch, {merge: true}).catch(function(){});
-  }
-});
-
-// syncLoad 从 localStorage 读取（数据已在 fireInit 时从云端同步）
 function syncLoad(key){
-  return Promise.resolve().then(function(){
-    var local = localStorage.getItem(key);
-    return local ? JSON.parse(local) : null;
+  return new Promise(function(resolve){
+    var local=localStorage.getItem(key);
+    if(!SYNC_URL){resolve(local?JSON.parse(local):null);return;}
+    fetch(SYNC_URL+'/api/data/'+key)
+      .then(function(r){return r.json();})
+      .then(function(data){
+        if(data!==null&&data!==undefined){localStorage.setItem(key, JSON.stringify(data));resolve(data);}
+        else if(local){resolve(JSON.parse(local));}
+        else{resolve(null);}
+      })
+      .catch(function(e){
+        console.warn('加载 '+key+' 失败，使用本地缓存:',e.message);
+        resolve(local?JSON.parse(local):null);
+      });
   });
+}
+
+// 页面加载时从服务端拉取最新数据到 localStorage
+async function initSync(){
+  if(!SYNC_URL)return;
+  try{
+    var resp=await fetch(SYNC_URL+'/api/state');
+    var serverData=await resp.json();
+    var keys=['skuData','replenOrders','deptPasswords','adminPwd','healthCfg','alertCfg','predictCfg','processedAlerts','opLog','aggRemarks'];
+    var synced=0;
+    keys.forEach(function(k){
+      if(serverData[k]!==undefined){
+        localStorage.setItem(k, JSON.stringify(serverData[k]));
+        synced++;
+      }
+    });
+    var skus=(serverData.skuData||[]).length;
+    var orders=(serverData.replenOrders||[]).length;
+    console.log('📡 已同步服务端数据: '+synced+'/'+keys.length+' 项, '+skus+' SKU, '+orders+' 补货单');
+  }catch(e){
+    console.warn('⚠️ 无法连接服务端，使用本地缓存数据');
+  }
 }
 
 // ============================================================
@@ -1395,7 +1260,7 @@ function autoSave(){
   },500);
 }
 function loadSavedData(){
-  // fireInit已把云端数据同步到localStorage，这里直接读即可
+  // initSync已把服务端数据同步到localStorage，这里直接读即可
   try{
     var raw=localStorage.getItem("skuData");
     if(!raw)return false;
@@ -2895,13 +2760,7 @@ document.addEventListener('DOMContentLoaded',async function(){
   if(typeof Chart==='undefined'){
     console.warn('⚠️ Chart.js库未加载！图表功能将不可用。请检查网络连接。');
   }
-  if(typeof firebase==='undefined'){
-    console.warn('⚠️ Firebase SDK未加载！将使用本地存储模式。');
-    _fireAvailable = false;
-    _fireReady = true;
-    updateFireStatus('red','🔴 离线','Firebase SDK 加载失败(gstatic.com 可能被墙)。数据仅存本机，无法多设备共享。');
-  }
-  await fireInit(); // 从 Firestore 加载云端共享数据（不可用时立即返回）
+  await initSync(); // 从 Express 服务端同步最新数据（不可用时使用本地缓存）
   loadData();
   document.getElementById('searchInput').addEventListener('input',function(e){
     var q=e.target.value.toLowerCase().trim();
