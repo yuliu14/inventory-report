@@ -477,7 +477,7 @@ function syncLoad(key){
 // ============================================================
 // DATA & RECALC ENGINE
 // ============================================================
-var predictCfg={w7:0.10,w14:0.20,w30:0.30,whist:0.40};savePredictCfg();
+var predictCfg={w7:0.10,w14:0.20,w30:0.30,whist:0.40}; // 默认值，已有的自定义配置不会被覆盖
   healthCfg={green:30,yellow:60,orange:90};
 var aggRemarks={}; // aggregate-level remarks: {"type:name"→"text"}
 try{var savedAR=localStorage.getItem("aggRemarks");if(savedAR)aggRemarks=JSON.parse(savedAR);}catch(e){}
@@ -1358,32 +1358,9 @@ function submitReplenOrder(orderId){
   return order;
 }
 
-var predictCfg={w7:0.10,w14:0.20,w30:0.30,whist:0.40};
-function loadPredictCfg(){
-  try{var s=localStorage.getItem("predictCfg");if(s){var c=JSON.parse(s);for(var k in c)predictCfg[k]=c[k];}}catch(e){}
-}
-function savePredictCfg(){
-  try{syncSave("predictCfg",predictCfg);}catch(e){}
-}
-function calcPredictSales(r){
-  if(r._manualPredict)return; // 用户手动设置了预计日销，不自动覆盖
-  var v7=r["7天日均销量"]||0;
-  var v14=r["14天日均销量"]||0;
-  var v30=r["30天日均销量"]||0;
-  var vhist=r["历年同时期日销"]||0;
-  var totalW=0, totalV=0;
-  if(v7>0){totalW+=predictCfg.w7; totalV+=v7*predictCfg.w7;}
-  if(v14>0){totalW+=predictCfg.w14; totalV+=v14*predictCfg.w14;}
-  if(v30>0){totalW+=predictCfg.w30; totalV+=v30*predictCfg.w30;}
-  if(vhist>0){totalW+=predictCfg.whist; totalV+=vhist*predictCfg.whist;}
-  if(totalW>0)r["预估日销"]=Math.round(totalV/totalW*100)/100;
-  else r["预估日销"]=v30||v14||v7||0.1;
-}
-loadPredictCfg();
-
-
 var opLog=[];
 function logOp(action,detail){opLog.push({time:new Date().toLocaleString(),action:action,detail:detail});if(opLog.length>200)opLog.shift();try{syncSave("opLog",opLog);}catch(e){}try{refreshLog();}catch(e){}}
+function saveLog(){try{syncSave("opLog",opLog);}catch(e){}}
 try{var savedLog=localStorage.getItem("opLog");if(savedLog)opLog=JSON.parse(savedLog);}catch(e){}
 
 function saveData(){
@@ -2187,13 +2164,13 @@ function reviewRO(orderId,action){
     if(updatedCount > 0){
       order._inventoryUpdated = true;
       syncSave('skuData', skuData);
+      saveReplenOrders(); // 保存 _inventoryUpdated 标记
       logOp('库存自动更新','补货单'+orderId+'通过: '+updatedCount+'个SKU, 国内现货→FBA在途');
       console.log('📦 库存已自动更新: '+updatedCount+'个SKU, 国内现货减少→FBA在途增加');
     }
   }
   // ====== 库存更新结束 ======
 
-  saveReplenOrders();
   logOp((action==='approved'?'通过':'驳回')+'补货单',orderId);
   clsModal();
   renderReplenView(currentView.view||'pending');
@@ -2280,6 +2257,7 @@ function initSKUColSort(){
   },100);
 }
 function chr(c){return String.fromCharCode(c);}
+var skuSort={col:null, dir:1};
 function sortSKUByField(field){
   if(skuSort.col===field)skuSort.dir=-skuSort.dir;else{skuSort.col=field;skuSort.dir=1;}
   var lv=currentView.level,dept=currentView.dept,store=currentView.store,spu=currentView.spu;
@@ -2460,7 +2438,8 @@ function rstSku(id){
 }
 function resetAll(){
   if(!confirm('确定重置所有SKU到原始数据？所有修改将丢失。'))return;
-  skuData.forEach(function(r){if(r._orig)Object.keys(r._orig).forEach(function(k){if(typeof r._orig[k]==='number')r[k]=r._orig[k];});calcDOS(r);});
+  skuData.forEach(function(r){if(r._orig)Object.keys(r._orig).forEach(function(k){if(typeof r._orig[k]==='number')r[k]=r._orig[k];});calcDOS(r);r._orig=JSON.parse(JSON.stringify(r));});
+  autoSave();
   refresh();showToast('🔄 已全部重置');
 }
 function refresh(){
