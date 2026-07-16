@@ -307,6 +307,7 @@ tbody tr:hover{background:#f8fafc}
 var _fireReady = false;       // Firestore 是否已就绪
 var _fireData = {};           // 云端数据内存镜像
 var _fireSaveBusy = false;    // 防止保存时循环触发
+var _fireLastSave = 0;        // 上次保存时间戳，用于冷却期
 var _fireUnsub = null;        // onSnapshot 取消订阅函数
 var _fsQueue = [];            // 待保存队列
 var _fsTimer = null;          // 防抖定时器
@@ -382,8 +383,9 @@ function fireInit(){
           console.log('📡 已从云端加载数据: '+count+'/'+keys.length+' 项, '+(serverData.skuData||[]).length+' SKU, '+(serverData.replenOrders||[]).length+' 补货单');
           _fireReady = true;
           if(firstCall){ firstCall = false; resolve(); }
-        }else if(!_fireSaveBusy){
+        }else if(!_fireSaveBusy && (Date.now() - _fireLastSave) > 3000){
           // 外部变更（其他用户/标签页修改了数据）：更新 localStorage
+          // 冷却期 3 秒内跳过，防止自己的写入触发回执刷新
           Object.keys(serverData).forEach(function(k){
             if(serverData[k] !== undefined){
               localStorage.setItem(k, JSON.stringify(serverData[k]));
@@ -410,16 +412,16 @@ function fireInit(){
 
 // 从 localStorage 重新加载内存变量
 function reloadFromStorage(){
-  try{var d=localStorage.getItem('skuData');if(d)skuData=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('replenOrders');if(d)replenOrders=JSON.parse(d);}catch(e){}
+  try{var d=localStorage.getItem('skuData');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))skuData=parsed;}}catch(e){}
+  try{var d=localStorage.getItem('replenOrders');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))replenOrders=parsed;}}catch(e){}
   try{var d=localStorage.getItem('deptPasswords');if(d)_deptPwdsCache=JSON.parse(d);}catch(e){}
   try{var d=localStorage.getItem('healthCfg');if(d)healthCfg=JSON.parse(d);}catch(e){}
   try{var d=localStorage.getItem('alertCfg');if(d)alertCfg=JSON.parse(d);}catch(e){}
   try{var d=localStorage.getItem('predictCfg');if(d)predictCfg=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('processedAlerts');if(d)processedAlerts=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('trendData');if(d)trendData=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('opLog');if(d)opLog=JSON.parse(d);}catch(e){}
-  try{var d=localStorage.getItem('aggRemarks');if(d)aggRemarks=JSON.parse(d);}catch(e){}
+  try{var d=localStorage.getItem('processedAlerts');if(d){var parsed=JSON.parse(d);if(parsed&&typeof parsed==='object')processedAlerts=parsed;}}catch(e){}
+  try{var d=localStorage.getItem('trendData');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))trendData=parsed;}}catch(e){}
+  try{var d=localStorage.getItem('opLog');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))opLog=parsed;}}catch(e){}
+  try{var d=localStorage.getItem('aggRemarks');if(d){var parsed=JSON.parse(d);if(parsed&&typeof parsed==='object')aggRemarks=parsed;}}catch(e){}
 }
 
 // 保存单个 key 到 localStorage + Firestore
@@ -441,6 +443,7 @@ function flushFirestore(){
   _fsQueue = [];
   batch._updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   _fireSaveBusy = true;
+  _fireLastSave = Date.now();
   db.collection('sharedData').doc('main').set(batch, {merge: true})
     .then(function(){
       _fireSaveBusy = false;
@@ -1504,6 +1507,7 @@ function resetAlertCfg(){
 function getAlerts(){
   var alerts=[];
   var authData=getAuthData();
+  if(!authData||!authData.length)return alerts;
   var levelOrder=['urgent','high','medium','low'];
   var labels={urgent:'紧急',high:'高风险',medium:'中风险',low:'关注'};
   authData.forEach(function(r){
@@ -1597,7 +1601,7 @@ function renderAlerts(alerts){
   // 拆分成断货和滞销两组
   var stockAlerts=allFiltered.filter(function(a){return a.type==='stockout';});
   var overAlerts=allFiltered.filter(function(a){return a.type==='overstock';});
-  return renderStockPanel(stockAlerts,showProcessed,processedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed);
+  return renderStockPanel(stockAlerts,showProcessed,processedCount,alerts.length)+renderOverPanel(overAlerts,showProcessed,processedCount);
 }
 
 function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
@@ -1676,7 +1680,7 @@ function renderStockPanel(stockAlerts,showProcessed,processedCount,totalAlerts){
   return h;
 }
 
-function renderOverPanel(overAlerts,showProcessed){
+function renderOverPanel(overAlerts,showProcessed,processedCount){
   // 始终显示滞销预警板块，无预警时显示"暂无"
   var counts={urgent:0,high:0,medium:0,low:0};
   overAlerts.forEach(function(a){counts[a.level]++;});
@@ -1689,6 +1693,7 @@ function renderOverPanel(overAlerts,showProcessed){
   h+='<div class="a-title">🟡 滞销预警 <span style="font-weight:400;font-size:10px;color:var(--text2)">库存积压 / 长库龄风险</span></div>';
   h+='<div class="a-counts">';
   ['urgent','high','medium','low'].forEach(function(lv){if(counts[lv]>0)h+='<span class="'+priCls[lv]+'">'+counts[lv]+' '+labels[lv]+'</span>';});
+  if(!showProcessed&&processedCount>0)h+='<button class="btn btn-xs" onclick="event.stopPropagation();switchProcessedView(true)" style="margin-left:4px;font-size:9px">📋 '+processedCount+'条已处理</button>';
   h+='<span class="a-arrow" style="color:var(--text2);margin-left:6px">▶</span>';
   h+='</div></div>';
 
