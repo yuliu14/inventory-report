@@ -412,8 +412,11 @@ function fireInit(){
 
 // 从 localStorage 重新加载内存变量（Firestore 外部更新时调用）
 // ⚠️ 必须给 skuData 重新分配 _id，否则复选框 key 全变成 "undefined|stockout"
+// ⚠️ 外部数据变更时清理 processedAlerts，防止旧 ID 串到新 SKU 上
 function reloadFromStorage(){
+  var oldLen=skuData.length;
   try{var d=localStorage.getItem('skuData');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed)){skuData=parsed;skuData.forEach(function(r,i){r._id=i;});}}}catch(e){}
+  if(skuData.length !== oldLen){processedAlerts={};saveProcessedAlerts();}
   try{var d=localStorage.getItem('replenOrders');if(d){var parsed=JSON.parse(d);if(Array.isArray(parsed))replenOrders=parsed;}}catch(e){}
   try{var d=localStorage.getItem('deptPasswords');if(d)_deptPwdsCache=JSON.parse(d);}catch(e){}
   try{var d=localStorage.getItem('healthCfg');if(d)healthCfg=JSON.parse(d);}catch(e){}
@@ -539,7 +542,7 @@ function getAuth(){
 function setAuth(auth){try{sessionStorage.setItem('currentAuth',JSON.stringify(auth));}catch(e){}}
 function clearAuth(){try{sessionStorage.removeItem('currentAuth');}catch(e){}}
 function getAuthData(){
-  var auth=getAuth();if(!auth||auth.isAdmin)return skuData;
+  var auth=getAuth();if(!auth)return[];if(auth.isAdmin)return skuData;
   return skuData.filter(function(r){return r['部门']===auth.dept;});
 }
 function getAuthDept(){var a=getAuth();return a? (a.isAdmin?null:a.dept):null;}
@@ -1250,7 +1253,7 @@ function createReplenOrder(items,dept,creator){
     items:items.map(function(it,i){
       var sku=skuData.find(function(r){return r._id===it.skuId;});
       // 从 generateROFromAlerts 传入的字段直接保留，缺失字段从SKU补充
-      var obj={skuId:it.skuId, approvedQty:0, note:''};
+      var obj={skuId:it.skuId, approvedQty:undefined, note:''};
       var fields=['SKU','spu','品名','店铺','国家',
         'dosWIP','dosDomestic','dosTransit','dosFBA','dosFBM','dosTotal',
         'wip','domestic','transit','fba','fbm','totalInv',
@@ -1741,7 +1744,7 @@ function renderOverPanel(overAlerts,showProcessed,stockProcessed,overProcessed,t
       h+='<div style="width:52px;text-align:right;padding:4px 3px;flex-shrink:0">'+(a.dosFBA||0).toFixed(1)+'</div>';
       h+='<div style="width:52px;text-align:right;padding:4px 3px;flex-shrink:0">'+(a.dosFBM||0).toFixed(1)+'</div>';
       h+='<div style="width:48px;text-align:right;padding:4px 3px;font-weight:600;color:'+(a.totalDOS>90?'#e11d48':'#f59e0b')+'">'+(a.totalDOS||0).toFixed(1)+'天</div>';
-      h+='<div style="width:52px;text-align:right;padding:4px 3px">'+fmt(a.totalInv||0)+'</div>';
+      h+='<div style="width:52px;text-align:right;padding:4px 3px">'+fmt(a.sku['总库存']||0)+'</div>';
       h+='<div style="width:52px;text-align:right;padding:4px 3px;font-weight:600;color:'+(a.agingRatio>20?'#e11d48':'#f59e0b')+'">'+(a.agingRatio||0).toFixed(0)+'%</div>';
       h+='<div style="flex:1;font-size:9px;color:var(--text2);padding:4px 3px">'+esc(a.reason)+'</div>';
       h+='</div>';
@@ -1808,7 +1811,7 @@ function generateROFromAlerts(){
   var auth=getAuth();if(!auth||auth.isAdmin){showToast('⚠️ 仅部门用户可以生成补货单');return;}
   var alerts=getAlerts();
   // 只取"已勾选"的断货预警（未处理+已勾选）
-  var stockoutAlerts=alerts.filter(function(a){return a.type==='stockout'&&isAlertChecked(a.sku._id,'stockout');});
+  var stockoutAlerts=alerts.filter(function(a){return a.type==='stockout'&&!isAlertProcessed(a.sku._id,'stockout')&&isAlertChecked(a.sku._id,'stockout');});
   if(!stockoutAlerts.length){showToast('请先勾选需要补货的SKU（断货预警左侧☑）');return;}
   var dept=auth.dept;
   var items=stockoutAlerts.map(function(a){
@@ -1835,7 +1838,7 @@ function generateROFromAlerts(){
       unitPrice:parseFloat(String(s['售价']||'0').replace('$',''))||0,
       // 补货相关
       currentStock:a.sellable||0, currentDOS:Math.max(a.dosFBA||0,a.dosFBM||0,a.dosDomestic||0),
-      suggestQty:a.suggested||0, requestQty:a.suggested||0, approvedQty:0,
+      suggestQty:a.suggested||0, requestQty:a.suggested||0, approvedQty:undefined,
       note:''
     };
   });
@@ -2109,7 +2112,7 @@ function reviewRO(orderId,action){
   // 通过时：只给"未手动设置过"的项自动填入申请数量
   if(action==='approved'){
     order.items.forEach(function(it){
-      if(!it.approvedQty)it.approvedQty=it.requestQty;
+      if(it.approvedQty===undefined)it.approvedQty=it.requestQty;
     });
   }
 
@@ -2736,9 +2739,11 @@ function deleteDept(dept){
 }
 
 function rebuildAll(){
-  // Re-assign IDs — 同时清除旧的复选框状态（因为 _id 变了）
+  // Re-assign IDs — 同时清除旧的复选框和处理状态（因为 _id 变了）
   window._uncheckedStockout = {};
   saveUnchecked();
+  processedAlerts = {};
+  saveProcessedAlerts();
   skuData.forEach(function(r,i){r._id=i;});
   // Sync new departments to password store
   loadPasswords();
