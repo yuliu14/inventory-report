@@ -338,12 +338,20 @@ function flushSync(){
   if(!_syncQueue.length||!SYNC_URL)return;
   var batch={};
   _syncQueue.forEach(function(item){batch[item.key]=item.value;});
+  // 先保存队列副本，成功后再清除，防止请求失败导致数据丢失
+  var queueSnapshot=_syncQueue.slice();
   _syncQueue=[];
   fetch(SYNC_URL+'/api/batch',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify(batch)
   }).then(function(){console.log('☁️ 已同步到服务器')})
-    .catch(function(e){console.warn('同步失败:',e.message);});
+    .catch(function(e){
+      console.warn('同步失败:',e.message);
+      // 恢复失败的数据到队列，下次重试
+      queueSnapshot.forEach(function(item){
+        _syncQueue.push(item);
+      });
+    });
 }
 
 function syncLoad(key){
@@ -366,7 +374,7 @@ function syncLoad(key){
 
 // 页面加载时从服务端拉取最新数据到 localStorage
 async function initSync(){
-  if(!SYNC_URL)return;
+  if(!SYNC_URL){setSyncStatus('offline');return;}
   try{
     var resp=await fetch(SYNC_URL+'/api/state');
     var serverData=await resp.json();
@@ -378,6 +386,9 @@ async function initSync(){
         synced++;
       }
     });
+    // 🔑 关键：更新 localStorage 后必须重新加载所有全局变量
+    // 否则 replenOrders、healthCfg 等数据不会同步到当前页面
+    reloadAllFromStorage();
     var skus=(serverData.skuData||[]).length;
     var orders=(serverData.replenOrders||[]).length;
     console.log('📡 已同步服务端数据: '+synced+'/'+keys.length+' 项, '+skus+' SKU, '+orders+' 补货单');
@@ -386,6 +397,45 @@ async function initSync(){
     console.warn('⚠️ 无法连接服务端，使用本地缓存数据');
     setSyncStatus('offline');
   }
+}
+
+// 从 localStorage 重新加载所有全局变量（initSync 更新 localStorage 后调用）
+function reloadAllFromStorage(){
+  // replenOrders
+  try{
+    var raw=localStorage.getItem('replenOrders');
+    if(raw){replenOrders=JSON.parse(raw);}
+  }catch(e){}
+  // predictCfg
+  try{
+    var raw=localStorage.getItem('predictCfg');
+    if(raw){var c=JSON.parse(raw);for(var k in c)predictCfg[k]=c[k];}
+  }catch(e){}
+  // healthCfg
+  try{
+    var raw=localStorage.getItem('healthCfg');
+    if(raw){var c=JSON.parse(raw);for(var k in c)healthCfg[k]=c[k];}
+  }catch(e){}
+  // alertCfg
+  try{
+    var raw=localStorage.getItem('alertCfg');
+    if(raw){var c=JSON.parse(raw);for(var k in c)alertCfg[k]=c[k];}
+  }catch(e){}
+  // processedAlerts
+  try{
+    var raw=localStorage.getItem('processedAlerts');
+    if(raw)processedAlerts=JSON.parse(raw);
+  }catch(e){}
+  // opLog
+  try{
+    var raw=localStorage.getItem('opLog');
+    if(raw)opLog=JSON.parse(raw);
+  }catch(e){}
+  // aggRemarks
+  try{
+    var raw=localStorage.getItem('aggRemarks');
+    if(raw)aggRemarks=JSON.parse(raw);
+  }catch(e){}
 }
 
 // 更新在线/离线状态指示器
